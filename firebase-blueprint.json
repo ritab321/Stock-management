@@ -1,0 +1,439 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authenticated staff or owner account with RBAC role",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 160 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "role": { "type": "string", "enum": ["owner", "manager", "sales", "accounts", "stock"] },
+        "active": { "type": "boolean" },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "inviteId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": ["uid", "email", "displayName", "role", "active", "orgId", "createdAt", "updatedAt", "createdBy"]
+    },
+    "StaffInvite": {
+      "title": "StaffInvite",
+      "description": "Owner-managed staff email invitation with assigned role",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 160 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "role": { "type": "string", "enum": ["owner", "manager", "sales", "accounts", "stock"] },
+        "active": { "type": "boolean" },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": ["email", "displayName", "role", "active", "orgId", "createdAt", "updatedAt", "createdBy"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Wholesale product catalog item with warehouse stock levels",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "sku": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "barcode": { "type": "string", "maxLength": 64 },
+        "brand": { "type": "string", "maxLength": 80 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "imageUrl": { "type": "string", "maxLength": 80000 },
+        "purchasePrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "minStockAlert": { "type": "number" },
+        "availableQty": { "type": "number" },
+        "damagedQty": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "warehouseZone": { "type": "string", "maxLength": 64 },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": ["name", "sku", "category", "purchasePrice", "sellingPrice", "minStockAlert", "availableQty", "damagedQty", "unit", "status", "orgId", "isDemo", "createdAt", "updatedAt", "createdBy"]
+    },
+    "StockBatch": {
+      "title": "StockBatch",
+      "description": "Purchase batch tracking unit cost and remaining warehouse quantity",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "purchaseId": { "type": "string", "maxLength": 128 },
+        "batchNo": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "supplierId": { "type": "string", "maxLength": 128 },
+        "unitCost": { "type": "number" },
+        "initialQty": { "type": "number" },
+        "remainingQty": { "type": "number" },
+        "purchaseDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": ["productId", "batchNo", "unitCost", "initialQty", "remainingQty", "purchaseDate", "orgId", "isDemo", "createdAt", "updatedAt", "createdBy"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Wholesale supplier profile and payable balances",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "contactPerson": { "type": "string", "maxLength": 120 },
+        "phone": { "type": "string", "minLength": 6, "maxLength": 24 },
+        "address": { "type": "string", "maxLength": 300 },
+        "gstin": { "type": "string", "maxLength": 20 },
+        "openingBalance": { "type": "number" },
+        "totalPurchases": { "type": "number" },
+        "totalPayments": { "type": "number" },
+        "totalReturns": { "type": "number" },
+        "outstandingPayable": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": ["name", "phone", "openingBalance", "totalPurchases", "totalPayments", "totalReturns", "outstandingPayable", "status", "orgId", "isDemo", "createdAt", "updatedAt", "createdBy"]
+    },
+    "Shop": {
+      "title": "Shop",
+      "description": "Retail shop customer profile across Paschim Medinipur",
+      "type": "object",
+      "properties": {
+        "shopName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "ownerName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "mobile": { "type": "string", "minLength": 6, "maxLength": 24 },
+        "whatsapp": { "type": "string", "maxLength": 24 },
+        "address": { "type": "string", "maxLength": 300 },
+        "villageTown": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "blockArea": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "district": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "route": { "type": "string", "maxLength": 100 },
+        "openingBalance": { "type": "number" },
+        "creditLimit": { "type": "number" },
+        "totalPurchases": { "type": "number" },
+        "totalPayments": { "type": "number" },
+        "totalReturns": { "type": "number" },
+        "totalCreditNotes": { "type": "number" },
+        "currentOutstanding": { "type": "number" },
+        "lastDeliveryDate": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": ["shopName", "ownerName", "mobile", "villageTown", "blockArea", "district", "openingBalance", "creditLimit", "totalPurchases", "totalPayments", "totalReturns", "totalCreditNotes", "currentOutstanding", "status", "orgId", "isDemo", "createdAt", "updatedAt", "createdBy"]
+    },
+    "Purchase": {
+      "title": "Purchase",
+      "description": "Warehouse or direct-to-shop supplier purchase record",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "supplierId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "supplierName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "purchaseDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "purchaseType": { "type": "string", "enum": ["warehouse", "direct_to_shop"] },
+        "targetShopId": { "type": "string", "maxLength": 128 },
+        "targetShopName": { "type": "string", "maxLength": 160 },
+        "linkedSaleId": { "type": "string", "maxLength": 128 },
+        "itemCount": { "type": "number" },
+        "subtotal": { "type": "number" },
+        "discount": { "type": "number" },
+        "additionalExpenses": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "amountPaid": { "type": "number" },
+        "remainingDue": { "type": "number" },
+        "status": { "type": "string", "enum": ["completed", "partial", "reversed"] },
+        "notes": { "type": "string", "maxLength": 500 },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdByName": { "type": "string", "minLength": 1, "maxLength": 100 }
+      },
+      "required": ["invoiceNumber", "supplierId", "supplierName", "purchaseDate", "purchaseType", "itemCount", "subtotal", "discount", "additionalExpenses", "totalCost", "amountPaid", "remainingDue", "status", "orgId", "isDemo", "createdAt", "updatedAt", "createdBy", "createdByName"]
+    },
+    "PurchaseItem": {
+      "title": "PurchaseItem",
+      "description": "Line item belonging to a purchase transaction",
+      "type": "object",
+      "properties": {
+        "purchaseId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "sku": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "qty": { "type": "number" },
+        "unitRate": { "type": "number" },
+        "lineTotal": { "type": "number" },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": ["purchaseId", "productId", "productName", "sku", "unit", "qty", "unitRate", "lineTotal", "orgId", "isDemo", "createdAt", "createdBy"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "Wholesale sale and delivery invoice via warehouse or direct supplier dispatch",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "deliveryMethod": { "type": "string", "enum": ["warehouse_dispatch", "direct_supplier_dispatch"] },
+        "shopId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "shopName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "shopBlock": { "type": "string", "maxLength": 100 },
+        "shopDistrict": { "type": "string", "maxLength": 100 },
+        "supplierId": { "type": "string", "maxLength": 128 },
+        "supplierName": { "type": "string", "maxLength": 160 },
+        "supplierInvoiceNo": { "type": "string", "maxLength": 64 },
+        "linkedPurchaseId": { "type": "string", "maxLength": 128 },
+        "saleDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "deliveryStatus": { "type": "string", "enum": ["delivered", "partial", "pending", "reversed"] },
+        "itemCount": { "type": "number" },
+        "subtotal": { "type": "number" },
+        "discount": { "type": "number" },
+        "transportExpense": { "type": "number" },
+        "netTotal": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "grossProfit": { "type": "number" },
+        "paymentReceived": { "type": "number" },
+        "remainingDue": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 500 },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdByName": { "type": "string", "minLength": 1, "maxLength": 100 }
+      },
+      "required": ["invoiceNumber", "deliveryMethod", "shopId", "shopName", "saleDate", "deliveryStatus", "itemCount", "subtotal", "discount", "transportExpense", "netTotal", "totalCost", "grossProfit", "paymentReceived", "remainingDue", "orgId", "isDemo", "createdAt", "updatedAt", "createdBy", "createdByName"]
+    },
+    "SaleItem": {
+      "title": "SaleItem",
+      "description": "Line item belonging to a sale/delivery invoice",
+      "type": "object",
+      "properties": {
+        "saleId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "sku": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "orderedQty": { "type": "number" },
+        "deliveredQty": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "lineTotal": { "type": "number" },
+        "lineCost": { "type": "number" },
+        "lineProfit": { "type": "number" },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": ["saleId", "productId", "productName", "sku", "unit", "orderedQty", "deliveredQty", "unitCost", "sellingPrice", "lineTotal", "lineCost", "lineProfit", "orgId", "isDemo", "createdAt", "updatedAt", "createdBy"]
+    },
+    "StockMovement": {
+      "title": "StockMovement",
+      "description": "Permanent warehouse stock movement ledger entry",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "productId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "sku": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "qty": { "type": "number" },
+        "movementType": { "type": "string", "enum": ["stock_in", "stock_out", "adjustment", "damaged", "transfer", "verification", "shop_return", "supplier_return"] },
+        "direction": { "type": "string", "enum": ["in", "out", "neutral"] },
+        "referenceType": { "type": "string", "maxLength": 40 },
+        "referenceId": { "type": "string", "maxLength": 128 },
+        "referenceNumber": { "type": "string", "maxLength": 64 },
+        "warehouseZone": { "type": "string", "maxLength": 64 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdByName": { "type": "string", "minLength": 1, "maxLength": 100 }
+      },
+      "required": ["date", "productId", "productName", "sku", "qty", "movementType", "direction", "orgId", "isDemo", "createdAt", "createdBy", "createdByName"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Customer receipt or supplier payment transaction (immutable except authorized reversal)",
+      "type": "object",
+      "properties": {
+        "partyType": { "type": "string", "enum": ["shop", "supplier"] },
+        "partyId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "partyName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "receiptNumber": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "paymentDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["cash", "upi", "bank_transfer", "other"] },
+        "paymentKind": { "type": "string", "enum": ["full", "partial", "advance", "credit_note", "refund", "opening_adjustment"] },
+        "referenceNo": { "type": "string", "maxLength": 80 },
+        "linkedInvoiceId": { "type": "string", "maxLength": 128 },
+        "linkedInvoiceNo": { "type": "string", "maxLength": 64 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["active", "reversed"] },
+        "reversalReason": { "type": "string", "maxLength": 300 },
+        "reversedBy": { "type": "string", "maxLength": 128 },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdByName": { "type": "string", "minLength": 1, "maxLength": 100 }
+      },
+      "required": ["partyType", "partyId", "partyName", "receiptNumber", "paymentDate", "amount", "method", "paymentKind", "status", "orgId", "isDemo", "createdAt", "updatedAt", "createdBy", "createdByName"]
+    },
+    "ReturnRecord": {
+      "title": "ReturnRecord",
+      "description": "Shop returns, supplier returns, damaged goods, or replacements",
+      "type": "object",
+      "properties": {
+        "returnNumber": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "returnType": { "type": "string", "enum": ["shop_return", "supplier_return", "damaged_writeoff", "replacement"] },
+        "returnDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "partyType": { "type": "string", "enum": ["shop", "supplier", "internal"] },
+        "partyId": { "type": "string", "maxLength": 128 },
+        "partyName": { "type": "string", "maxLength": 160 },
+        "productId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "qty": { "type": "number" },
+        "unitValue": { "type": "number" },
+        "totalValue": { "type": "number" },
+        "condition": { "type": "string", "enum": ["good_sellable", "damaged"] },
+        "returnedToStock": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "linkedInvoiceNo": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["completed", "reversed"] },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdByName": { "type": "string", "minLength": 1, "maxLength": 100 }
+      },
+      "required": ["returnNumber", "returnType", "returnDate", "partyType", "productId", "productName", "qty", "unitValue", "totalValue", "condition", "returnedToStock", "reason", "status", "orgId", "isDemo", "createdAt", "updatedAt", "createdBy", "createdByName"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable activity and transaction audit log",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "module": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "entityLabel": { "type": "string", "maxLength": 160 },
+        "details": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "userRole": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "isDemo": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["action", "module", "details", "userId", "userName", "userRole", "orgId", "isDemo", "createdAt"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "System and business configuration settings",
+      "type": "object",
+      "properties": {
+        "businessName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "appName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "location": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "phone": { "type": "string", "maxLength": 24 },
+        "gstin": { "type": "string", "maxLength": 20 },
+        "invoicePrefix": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "allowNegativeStock": { "type": "boolean" },
+        "lastBackupAt": { "type": "string", "maxLength": 64 },
+        "orgId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "required": ["businessName", "appName", "location", "invoicePrefix", "allowNegativeStock", "orgId", "updatedAt", "updatedBy"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Authenticated user profiles and RBAC roles"
+    },
+    "/staff_invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/StaffInvite" },
+      "description": "Owner-issued staff invitations mapping verified Google emails to roles"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Wholesale product catalog and warehouse inventory counts"
+    },
+    "/stock_batches/{batchId}": {
+      "schema": { "$ref": "#/entities/StockBatch" },
+      "description": "Purchase-lot batches for actual batch purchase cost tracking"
+    },
+    "/suppliers/{supplierId}": {
+      "schema": { "$ref": "#/entities/Supplier" },
+      "description": "Supplier master profiles and payable totals"
+    },
+    "/shops/{shopId}": {
+      "schema": { "$ref": "#/entities/Shop" },
+      "description": "Retail shop customer profiles across Paschim Medinipur"
+    },
+    "/purchases/{purchaseId}": {
+      "schema": { "$ref": "#/entities/Purchase" },
+      "description": "Warehouse and direct-to-shop purchase orders"
+    },
+    "/purchase_items/{itemId}": {
+      "schema": { "$ref": "#/entities/PurchaseItem" },
+      "description": "Line items for purchase transactions"
+    },
+    "/sales/{saleId}": {
+      "schema": { "$ref": "#/entities/Sale" },
+      "description": "Warehouse dispatch and direct supplier dispatch sales/deliveries"
+    },
+    "/sale_items/{itemId}": {
+      "schema": { "$ref": "#/entities/SaleItem" },
+      "description": "Line items for sales and delivery invoices"
+    },
+    "/stock_movements/{movementId}": {
+      "schema": { "$ref": "#/entities/StockMovement" },
+      "description": "Permanent immutable warehouse stock movement history"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Customer receipts and supplier payments"
+    },
+    "/returns/{returnId}": {
+      "schema": { "$ref": "#/entities/ReturnRecord" },
+      "description": "Shop returns, supplier returns, damaged goods, and replacements"
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable transaction and user activity audit logs"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Organization-wide business and stock configuration"
+    }
+  }
+}

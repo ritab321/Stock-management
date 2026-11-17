@@ -1,0 +1,8 @@
+{
+  "name": "Pramanik Stock Manager",
+  "description": "Wholesale distribution, warehouse inventory, direct supplier-to-shop delivery, ledger accounting, and multi-user management system for Pramanik Digital Point (Singda, Dantan, Paschim Medinipur).",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
