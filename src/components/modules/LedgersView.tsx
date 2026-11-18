@@ -5,7 +5,7 @@ import { exportRowsToXLSX, exportTableToPDF } from '../../lib/exportUtils';
 import { formatDateDDMMYYYY, formatINR } from '../../lib/formatters';
 
 export const LedgersView: React.FC = () => {
-  const { caps, shops, suppliers, sales, purchases, payments, returns, settings } = useErp();
+  const { caps, shops, suppliers, sales, invoices, purchases, payments, returns, settings } = useErp();
   const [ledgerType, setLedgerType] = useState<'customer' | 'supplier'>('customer');
   const [selectedShopId, setSelectedShopId] = useState<string>(() => shops[0]?.id || '');
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>(() => suppliers[0]?.id || '');
@@ -40,6 +40,17 @@ export const LedgersView: React.FC = () => {
               : `Direct Supplier Delivery (${s.supplierName || ''})`,
           ref: s.invoiceNumber,
           debit: s.netTotal,
+          credit: 0,
+        });
+      }
+    }
+    for (const inv of invoices) {
+      if (inv.shopId === activeShop.id && inv.status === 'confirmed') {
+        entries.push({
+          date: inv.invoiceDate,
+          particulars: 'Bill Book Invoice',
+          ref: inv.invoiceNumber,
+          debit: inv.netTotal,
           credit: 0,
         });
       }
@@ -79,9 +90,9 @@ export const LedgersView: React.FC = () => {
       return { ...e, balance: running };
     });
 
-    // Authoritative formula check: Opening Balance + Credit Sales + Other Debits - Payments Received - Credit Notes - Returns
+    // Authoritative formula check: Opening Balance + Credit Sales + Bill Book Invoices + Other Debits - Payments Received - Credit Notes - Returns
     return { rows, closing: running };
-  }, [activeShop, sales, payments, returns]);
+  }, [activeShop, sales, invoices, payments, returns]);
 
   const supplierStatement = useMemo(() => {
     if (!activeSupplier) return { rows: [], closing: 0 };

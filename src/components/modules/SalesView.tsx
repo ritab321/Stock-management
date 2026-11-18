@@ -246,7 +246,7 @@ export const SalesView: React.FC = () => {
           <button
             type="button"
             onClick={openNewSale}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>New Sale / Dispatch</span>

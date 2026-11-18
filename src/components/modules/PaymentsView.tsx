@@ -1,7 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Printer, RotateCcw, Search } from 'lucide-react';
 import { useErp } from '../../context/ErpContext';
-import { recordPaymentTransaction, reversePaymentTransaction } from '../../lib/erpService';
+import {
+  recordBillPaymentTransaction,
+  recordPaymentTransaction,
+  reversePaymentTransaction,
+} from '../../lib/erpService';
 import { generatePaymentReceiptPDF } from '../../lib/exportUtils';
 import { formatDateDDMMYYYY, formatINR, getTodayIST } from '../../lib/formatters';
 import { t } from '../../lib/i18n';
@@ -9,7 +13,8 @@ import type { Payment, PaymentKind, PaymentMethod } from '../../types/erp';
 import { Modal } from '../ui/Modal';
 
 export const PaymentsView: React.FC = () => {
-  const { profile, caps, lang, payments, shops, suppliers, sales, purchases, settings } = useErp();
+  const { profile, caps, lang, payments, shops, suppliers, sales, invoices, purchases, settings } =
+    useErp();
   const [search, setSearch] = useState('');
   const [partyFilter, setPartyFilter] = useState<'all' | 'shop' | 'supplier'>('all');
   const [modalOpen, setModalOpen] = useState(false);
@@ -26,7 +31,7 @@ export const PaymentsView: React.FC = () => {
     method: 'upi' as PaymentMethod,
     paymentKind: 'partial' as PaymentKind,
     referenceNo: '',
-    linkedInvoiceId: '',
+    linkedInvoiceKey: '',
     notes: '',
   });
 
@@ -57,7 +62,7 @@ export const PaymentsView: React.FC = () => {
       method: 'upi',
       paymentKind: 'partial',
       referenceNo: '',
-      linkedInvoiceId: '',
+      linkedInvoiceKey: '',
       notes: '',
     });
     setModalOpen(true);
@@ -65,10 +70,30 @@ export const PaymentsView: React.FC = () => {
 
   const partyInvoices = useMemo(() => {
     if (form.partyType === 'shop') {
-      return sales.filter((s) => s.shopId === form.partyId && s.remainingDue > 0);
+      const fromSales = sales
+        .filter((s) => s.shopId === form.partyId && s.deliveryStatus !== 'reversed' && s.remainingDue > 0)
+        .map((s) => ({
+          key: `sale:${s.id}`,
+          label: `[Dispatch] ${s.invoiceNumber}`,
+          remainingDue: s.remainingDue,
+        }));
+      const fromBills = invoices
+        .filter((inv) => inv.shopId === form.partyId && inv.status === 'confirmed' && inv.remainingDue > 0)
+        .map((inv) => ({
+          key: `bill:${inv.id}`,
+          label: `[Bill Book] ${inv.invoiceNumber}`,
+          remainingDue: inv.remainingDue,
+        }));
+      return [...fromBills, ...fromSales];
     }
-    return purchases.filter((p) => p.supplierId === form.partyId && p.remainingDue > 0);
-  }, [form.partyType, form.partyId, sales, purchases]);
+    return purchases
+      .filter((p) => p.supplierId === form.partyId && p.status !== 'reversed' && p.remainingDue > 0)
+      .map((p) => ({
+        key: `pur:${p.id}`,
+        label: p.invoiceNumber,
+        remainingDue: p.remainingDue,
+      }));
+  }, [form.partyType, form.partyId, sales, invoices, purchases]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,13 +105,36 @@ export const PaymentsView: React.FC = () => {
     setSaving(true);
     setErr(null);
     try {
-      await recordPaymentTransaction(
-        { uid: profile.uid, displayName: profile.displayName, role: profile.role },
-        {
-          ...form,
-          linkedInvoiceId: form.linkedInvoiceId || undefined,
-        }
-      );
+      if (form.partyType === 'shop' && form.linkedInvoiceKey.startsWith('bill:')) {
+        const billId = form.linkedInvoiceKey.slice(5);
+        await recordBillPaymentTransaction(
+          { uid: profile.uid, displayName: profile.displayName, role: profile.role },
+          billId,
+          form.amount,
+          form.paymentDate,
+          form.method,
+          form.referenceNo,
+          form.notes
+        );
+      } else {
+        const rawLinkedId = form.linkedInvoiceKey.includes(':')
+          ? form.linkedInvoiceKey.split(':')[1]
+          : form.linkedInvoiceKey || undefined;
+        await recordPaymentTransaction(
+          { uid: profile.uid, displayName: profile.displayName, role: profile.role },
+          {
+            partyType: form.partyType,
+            partyId: form.partyId,
+            paymentDate: form.paymentDate,
+            amount: form.amount,
+            method: form.method,
+            paymentKind: form.paymentKind,
+            referenceNo: form.referenceNo,
+            linkedInvoiceId: rawLinkedId,
+            notes: form.notes,
+          }
+        );
+      }
       setModalOpen(false);
     } catch (payErr) {
       setErr(payErr instanceof Error ? payErr.message : 'Failed to record payment.');
@@ -125,7 +173,7 @@ export const PaymentsView: React.FC = () => {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search receipt, party, UTR, invoice..."
-              className="w-64 rounded-lg border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-xs"
+              className="w-64 rounded-lg border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-xs focus:border-green-600 focus:outline-none"
             />
           </div>
           {caps.canRecordSupplierPayments && (
@@ -145,7 +193,7 @@ export const PaymentsView: React.FC = () => {
           <button
             type="button"
             onClick={openModal}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-green-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Record Payment / Receipt</span>
@@ -218,7 +266,7 @@ export const PaymentsView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => generatePaymentReceiptPDF(p, settings)}
-                        className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
                       >
                         <Printer className="h-3 w-3" />
                         <span>Receipt</span>
@@ -230,7 +278,7 @@ export const PaymentsView: React.FC = () => {
                             setReverseTarget(p);
                             setReverseReason('');
                           }}
-                          className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-50"
+                          className="inline-flex items-center gap-1 whitespace-nowrap rounded border border-red-200 px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-50"
                         >
                           <RotateCcw className="h-3 w-3" />
                           <span>Reverse</span>
@@ -267,7 +315,7 @@ export const PaymentsView: React.FC = () => {
                 onChange={(e) => {
                   const pt = e.target.value as 'shop' | 'supplier';
                   const firstId = pt === 'shop' ? shops[0]?.id || '' : suppliers[0]?.id || '';
-                  setForm({ ...form, partyType: pt, partyId: firstId, linkedInvoiceId: '' });
+                  setForm({ ...form, partyType: pt, partyId: firstId, linkedInvoiceKey: '' });
                 }}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2"
               >
@@ -284,7 +332,9 @@ export const PaymentsView: React.FC = () => {
               <select
                 required
                 value={form.partyId}
-                onChange={(e) => setForm({ ...form, partyId: e.target.value, linkedInvoiceId: '' })}
+                onChange={(e) =>
+                  setForm({ ...form, partyId: e.target.value, linkedInvoiceKey: '' })
+                }
                 className="w-full rounded-lg border border-slate-200 px-3 py-2"
               >
                 <option value="">Select Account</option>
@@ -369,14 +419,22 @@ export const PaymentsView: React.FC = () => {
                 Link Unpaid Invoice (Optional)
               </label>
               <select
-                value={form.linkedInvoiceId}
-                onChange={(e) => setForm({ ...form, linkedInvoiceId: e.target.value })}
+                value={form.linkedInvoiceKey}
+                onChange={(e) => {
+                  const key = e.target.value;
+                  const match = partyInvoices.find((inv) => inv.key === key);
+                  setForm({
+                    ...form,
+                    linkedInvoiceKey: key,
+                    amount: match && form.amount === 0 ? match.remainingDue : form.amount,
+                  });
+                }}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2"
               >
                 <option value="">General Account Payment</option>
                 {partyInvoices.map((inv) => (
-                  <option key={inv.id} value={inv.id}>
-                    {inv.invoiceNumber} — Due {formatINR(inv.remainingDue)}
+                  <option key={inv.key} value={inv.key}>
+                    {inv.label} — Due {formatINR(inv.remainingDue)}
                   </option>
                 ))}
               </select>
@@ -404,7 +462,7 @@ export const PaymentsView: React.FC = () => {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
             >
               {saving ? 'Recording...' : 'Confirm Payment'}
             </button>

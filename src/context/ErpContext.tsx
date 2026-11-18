@@ -33,6 +33,8 @@ import type {
   AlertItem,
   AppSettings,
   AuditLog,
+  BillInvoice,
+  BillInvoiceItem,
   Language,
   Payment,
   Product,
@@ -69,6 +71,8 @@ interface ErpContextValue {
   purchaseItems: PurchaseItem[];
   sales: Sale[];
   saleItems: SaleItem[];
+  invoices: BillInvoice[];
+  invoiceItems: BillInvoiceItem[];
   stockMovements: StockMovement[];
   payments: Payment[];
   returns: ReturnRecord[];
@@ -104,6 +108,8 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
+  const [invoices, setInvoices] = useState<BillInvoice[]>([]);
+  const [invoiceItems, setInvoiceItems] = useState<BillInvoiceItem[]>([]);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
@@ -240,6 +246,8 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setPurchaseItems([]);
       setSales([]);
       setSaleItems([]);
+      setInvoices([]);
+      setInvoiceItems([]);
       setStockMovements([]);
       setPayments([]);
       setReturns([]);
@@ -296,15 +304,19 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setPurchaseItems([]);
     }
 
-    // Shops, Sales, SaleItems: owner, manager, sales, accounts
+    // Shops, Sales, SaleItems, Digital Bill Book: owner, manager, sales, accounts
     if (['owner', 'manager', 'sales', 'accounts'].includes(role)) {
       subscribeCol<Shop>('shops', setShops);
       subscribeCol<Sale>('sales', setSales);
       subscribeCol<SaleItem>('sale_items', setSaleItems);
+      subscribeCol<BillInvoice>('invoices', setInvoices);
+      subscribeCol<BillInvoiceItem>('invoice_items', setInvoiceItems);
     } else {
       setShops([]);
       setSales([]);
       setSaleItems([]);
+      setInvoices([]);
+      setInvoiceItems([]);
     }
 
     // Payments: owner, manager, accounts read all; sales reads shop payments only
@@ -436,8 +448,9 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       products.some((p) => p.isDemo) ||
       shops.some((s) => s.isDemo) ||
       suppliers.some((s) => s.isDemo) ||
-      sales.some((s) => s.isDemo),
-    [products, shops, suppliers, sales]
+      sales.some((s) => s.isDemo) ||
+      invoices.some((i) => i.isDemo),
+    [products, shops, suppliers, sales, invoices]
   );
 
   const loginWithGoogle = async () => {
@@ -474,6 +487,8 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         purchaseItems,
         sales,
         saleItems,
+        invoices,
+        invoiceItems,
         stockMovements,
         payments,
         returns,

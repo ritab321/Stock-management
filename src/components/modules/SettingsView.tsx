@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { Database, Download, Trash2, Upload } from 'lucide-react';
+import { Building2, Database, Download, Trash2, Upload } from 'lucide-react';
 import { useErp } from '../../context/ErpContext';
 import { seedDemoData } from '../../lib/demoSeed';
 import { logAudit, removeAllDemoData, saveSettings } from '../../lib/erpService';
+import { exportRowsToXLSX } from '../../lib/exportUtils';
 import { db, ORG_ID } from '../../lib/firebase';
-import { makeSafeId } from '../../lib/formatters';
+import { compressImageToDataUrl, makeSafeId } from '../../lib/formatters';
+import type { PrintFormat } from '../../types/erp';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -21,6 +23,8 @@ export const SettingsView: React.FC = () => {
     purchaseItems,
     sales,
     saleItems,
+    invoices,
+    invoiceItems,
     stockMovements,
     payments,
     returns,
@@ -30,9 +34,13 @@ export const SettingsView: React.FC = () => {
     businessName: 'Pramanik Digital Point',
     appName: 'Pramanik Stock Manager',
     location: 'Singda, Dantan, Paschim Medinipur, West Bengal 721426',
-    phone: '',
+    phone: '95933 53980',
     gstin: '',
+    logoUrl: '',
     invoicePrefix: 'PDP',
+    invoiceSequence: 1000,
+    defaultPrintFormat: 'a4' as PrintFormat,
+    defaultLowStockThreshold: 10,
     allowNegativeStock: false,
   });
 
@@ -47,13 +55,28 @@ export const SettingsView: React.FC = () => {
         businessName: settings.businessName || 'Pramanik Digital Point',
         appName: settings.appName || 'Pramanik Stock Manager',
         location: settings.location || 'Singda, Dantan, Paschim Medinipur, West Bengal',
-        phone: settings.phone || '',
+        phone: settings.phone || '95933 53980',
         gstin: settings.gstin || '',
+        logoUrl: settings.logoUrl || '',
         invoicePrefix: settings.invoicePrefix || 'PDP',
+        invoiceSequence: settings.invoiceSequence ?? 1000,
+        defaultPrintFormat: settings.defaultPrintFormat || 'a4',
+        defaultLowStockThreshold: settings.defaultLowStockThreshold ?? 10,
         allowNegativeStock: Boolean(settings.allowNegativeStock),
       });
     }
   }, [settings]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compact = await compressImageToDataUrl(file, 200, 0.78);
+      setForm((f) => ({ ...f, logoUrl: compact }));
+    } catch (err) {
+      setErrMsg(err instanceof Error ? err.message : 'Failed to process logo image.');
+    }
+  };
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +114,8 @@ export const SettingsView: React.FC = () => {
       purchaseItems,
       sales,
       saleItems,
+      invoices,
+      invoiceItems,
       stockMovements,
       payments,
       returns,
@@ -113,7 +138,7 @@ export const SettingsView: React.FC = () => {
       'settings',
       'Downloaded full JSON database backup'
     );
-    setStatusMsg('Full JSON backup downloaded.');
+    setStatusMsg('Full JSON backup downloaded (including Bill Book invoices).');
   };
 
   const handleExportExcelWorkbook = () => {
@@ -123,10 +148,96 @@ export const SettingsView: React.FC = () => {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(shops), 'Shops');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(purchases), 'Purchases');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sales), 'Sales');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(invoices), 'BillBookInvoices');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payments), 'Payments');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(returns), 'Returns');
     XLSX.writeFile(wb, `pramanik-full-workbook-${new Date().toISOString().slice(0, 10)}.xlsx`);
     setStatusMsg('Multi-sheet Excel workbook exported.');
+  };
+
+  const handleSingleEntityExport = (entity: 'products' | 'shops' | 'suppliers' | 'invoices' | 'payments') => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (entity === 'products') {
+      exportRowsToXLSX(
+        `products-${stamp}.xlsx`,
+        'Products',
+        ['Name', 'SKU', 'Brand', 'Category', 'Purchase Price', 'Selling Price', 'Available', 'Damaged', 'Unit'],
+        products.map((p) => [
+          p.name,
+          p.sku,
+          p.brand || '',
+          p.category,
+          p.purchasePrice,
+          p.sellingPrice,
+          p.availableQty,
+          p.damagedQty,
+          p.unit,
+        ])
+      );
+    } else if (entity === 'shops') {
+      exportRowsToXLSX(
+        `shops-${stamp}.xlsx`,
+        'Shops',
+        ['Shop Name', 'Owner', 'Mobile', 'Village/Town', 'Block', 'District', 'Credit Limit', 'Outstanding'],
+        shops.map((s) => [
+          s.shopName,
+          s.ownerName,
+          s.mobile,
+          s.villageTown,
+          s.blockArea,
+          s.district,
+          s.creditLimit,
+          s.currentOutstanding,
+        ])
+      );
+    } else if (entity === 'suppliers') {
+      exportRowsToXLSX(
+        `suppliers-${stamp}.xlsx`,
+        'Suppliers',
+        ['Supplier', 'Contact', 'Phone', 'GSTIN', 'Total Purchases', 'Total Paid', 'Payable'],
+        suppliers.map((s) => [
+          s.name,
+          s.contactPerson || '',
+          s.phone,
+          s.gstin || '',
+          s.totalPurchases,
+          s.totalPayments,
+          s.outstandingPayable,
+        ])
+      );
+    } else if (entity === 'invoices') {
+      exportRowsToXLSX(
+        `bill-book-invoices-${stamp}.xlsx`,
+        'BillBook',
+        ['Bill No', 'Date', 'Shop', 'Status', 'Payment', 'Net Total', 'Paid', 'Due'],
+        invoices.map((i) => [
+          i.invoiceNumber,
+          i.invoiceDate,
+          i.shopName,
+          i.status,
+          i.paymentStatus,
+          i.netTotal,
+          i.paymentReceived,
+          i.remainingDue,
+        ])
+      );
+    } else {
+      exportRowsToXLSX(
+        `payments-${stamp}.xlsx`,
+        'Payments',
+        ['Receipt No', 'Date', 'Party Type', 'Party', 'Method', 'Amount', 'Status'],
+        payments.map((p) => [
+          p.receiptNumber,
+          p.paymentDate,
+          p.partyType,
+          p.partyName,
+          p.method,
+          p.amount,
+          p.status,
+        ])
+      );
+    }
+    setStatusMsg(`Exported ${entity} spreadsheet.`);
   };
 
   const handleRestoreJSON = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -147,6 +258,8 @@ export const SettingsView: React.FC = () => {
         ['purchase_items', data.purchaseItems || []],
         ['sales', data.sales || []],
         ['sale_items', data.saleItems || []],
+        ['invoices', data.invoices || []],
+        ['invoice_items', data.invoiceItems || []],
         ['stock_movements', data.stockMovements || []],
         ['payments', data.payments || []],
         ['returns', data.returns || []],
@@ -164,10 +277,8 @@ export const SettingsView: React.FC = () => {
             delete copy.id;
             copy.orgId = ORG_ID;
             copy.createdAt = now;
-            if ('updatedAt' in copy || !['purchase_items', 'stock_movements'].includes(colName)) {
-              if (colName !== 'purchase_items' && colName !== 'stock_movements') {
-                copy.updatedAt = now;
-              }
+            if (!['purchase_items', 'stock_movements'].includes(colName)) {
+              copy.updatedAt = now;
             }
             copy.createdBy = profile.uid;
             batch.set(doc(db, colName, docId), copy);
@@ -235,7 +346,7 @@ export const SettingsView: React.FC = () => {
         className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-xs lg:col-span-7"
       >
         <h3 className="text-sm font-semibold text-slate-900">
-          Business Profile & Inventory Controls
+          Business Profile, Billing & Inventory Controls
         </h3>
 
         {statusMsg && (
@@ -248,6 +359,38 @@ export const SettingsView: React.FC = () => {
             {errMsg}
           </div>
         )}
+
+        <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+            {form.logoUrl ? (
+              <img src={form.logoUrl} alt="Business Logo" className="h-full w-full object-contain" />
+            ) : (
+              <Building2 className="h-6 w-6 text-slate-400" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <label className="mb-1 block font-medium text-slate-700">
+              Business Logo (Printed on A4/A5 Invoices)
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                className="text-xs text-slate-600"
+              />
+              {form.logoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, logoUrl: '' })}
+                  className="text-[11px] font-medium text-red-600 hover:underline"
+                >
+                  Remove Logo
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -308,6 +451,45 @@ export const SettingsView: React.FC = () => {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono"
             />
           </div>
+          <div>
+            <label className="mb-1 block font-medium text-slate-700">Next Bill Sequence No</label>
+            <input
+              type="number"
+              min="1"
+              value={form.invoiceSequence}
+              onChange={(e) => setForm({ ...form, invoiceSequence: Number(e.target.value) })}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block font-medium text-slate-700">Default Print Format</label>
+            <select
+              value={form.defaultPrintFormat}
+              onChange={(e) =>
+                setForm({ ...form, defaultPrintFormat: e.target.value as PrintFormat })
+              }
+              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+            >
+              <option value="a4">A4 Formal Invoice</option>
+              <option value="a5">A5 Half-Page Bill</option>
+              <option value="80mm">80mm Thermal POS Receipt</option>
+              <option value="58mm">58mm Thermal POS Receipt</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block font-medium text-slate-700">
+              Default Low Stock Alert Level
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={form.defaultLowStockThreshold}
+              onChange={(e) =>
+                setForm({ ...form, defaultLowStockThreshold: Number(e.target.value) })
+              }
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono"
+            />
+          </div>
         </div>
 
         <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -322,7 +504,8 @@ export const SettingsView: React.FC = () => {
               Owner Override: Allow Negative Warehouse Stock
             </strong>
             <span className="text-[11px] text-slate-500">
-              By default negative stock is blocked. Enable only when Owner authorizes dispatching stock prior to purchase entry.
+              By default negative stock is blocked. Enable only when Owner authorizes dispatching
+              stock prior to purchase entry.
             </span>
           </span>
         </label>
@@ -331,7 +514,7 @@ export const SettingsView: React.FC = () => {
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg bg-slate-700 px-4 py-2 font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save Business Settings'}
           </button>
@@ -386,6 +569,32 @@ export const SettingsView: React.FC = () => {
               <span>Restore from JSON Backup</span>
             </button>
           </div>
+
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <div className="mb-2 text-[11px] font-semibold text-slate-600">
+              Individual Table Exports (.xlsx)
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['products', 'Products'],
+                  ['shops', 'Shops'],
+                  ['suppliers', 'Suppliers'],
+                  ['invoices', 'Bill Book'],
+                  ['payments', 'Payments'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleSingleEntityExport(key)}
+                  className="whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-6 text-xs">
@@ -399,7 +608,7 @@ export const SettingsView: React.FC = () => {
               type="button"
               disabled={saving}
               onClick={handleSeedDemo}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 font-semibold text-blue-700 hover:bg-blue-100"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3.5 py-2 font-semibold text-slate-700 hover:bg-slate-100"
             >
               <Database className="h-4 w-4" />
               <span>Load DEMO Dataset</span>

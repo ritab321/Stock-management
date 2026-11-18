@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDocs,
   query,
@@ -25,10 +26,14 @@ import {
 } from './formatters';
 import type {
   AppSettings,
+  BillInvoice,
+  BillInvoiceItem,
+  BillPaymentStatus,
   DeliveryMethod,
   MovementType,
   PaymentKind,
   PaymentMethod,
+  PrintFormat,
   Product,
   PurchaseType,
   ReturnType,
@@ -64,7 +69,8 @@ export async function logAudit(
   details: string,
   entityId?: string,
   entityLabel?: string,
-  isDemo = false
+  isDemo = false,
+  extra?: { oldValue?: string; newValue?: string; notes?: string }
 ): Promise<void> {
   const id = makeSafeId('aud');
   try {
@@ -77,6 +83,9 @@ export async function logAudit(
         entityId: entityId?.slice(0, 128),
         entityLabel: entityLabel?.slice(0, 160),
         details: details.slice(0, 500),
+        oldValue: extra?.oldValue?.slice(0, 500),
+        newValue: extra?.newValue?.slice(0, 500),
+        notes: extra?.notes?.slice(0, 500),
         userId: actor.uid,
         userName: actor.displayName.slice(0, 100),
         userRole: actor.role,
@@ -103,6 +112,7 @@ export async function saveProduct(
     barcode?: string;
     brand?: string;
     category: string;
+    description?: string;
     imageUrl?: string;
     purchasePrice: number;
     sellingPrice: number;
@@ -121,6 +131,7 @@ export async function saveProduct(
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(ref);
       const now = serverTimestamp();
+      let oldSummary = '';
       if (isNew || !snap.exists()) {
         const initQty = Math.max(0, Number(input.availableQty) || 0);
         tx.set(
@@ -131,6 +142,7 @@ export async function saveProduct(
             barcode: input.barcode?.trim().slice(0, 64),
             brand: input.brand?.trim().slice(0, 80),
             category: input.category.trim().slice(0, 80),
+            description: input.description?.trim().slice(0, 500),
             imageUrl: input.imageUrl?.slice(0, 80000),
             purchasePrice: roundMoney(input.purchasePrice),
             sellingPrice: roundMoney(input.sellingPrice),
@@ -185,6 +197,7 @@ export async function saveProduct(
         }
       } else {
         const existing = snap.data() as Product;
+        oldSummary = `Price ${existing.purchasePrice}/${existing.sellingPrice}, Qty ${existing.availableQty}, Status ${existing.status}`;
         tx.update(
           ref,
           cleanOptional({
@@ -193,6 +206,7 @@ export async function saveProduct(
             barcode: input.barcode?.trim().slice(0, 64) || '',
             brand: input.brand?.trim().slice(0, 80) || '',
             category: input.category.trim().slice(0, 80),
+            description: input.description?.trim().slice(0, 500) || '',
             imageUrl: input.imageUrl !== undefined ? input.imageUrl.slice(0, 80000) : existing.imageUrl,
             purchasePrice: roundMoney(input.purchasePrice),
             sellingPrice: roundMoney(input.sellingPrice),
@@ -206,23 +220,59 @@ export async function saveProduct(
           })
         );
       }
-      tx.set(doc(db, 'audit_logs', makeSafeId('aud')), {
-        action: isNew ? 'CREATE_PRODUCT' : 'UPDATE_PRODUCT',
-        module: 'products',
-        entityId: id,
-        entityLabel: input.name.trim().slice(0, 160),
-        details: `${isNew ? 'Created' : 'Updated'} product ${input.name} (${input.sku})`,
-        userId: actor.uid,
-        userName: actor.displayName.slice(0, 100),
-        userRole: actor.role,
-        orgId: ORG_ID,
-        isDemo: false,
-        createdAt: now,
-      });
+      const newSummary = `Price ${roundMoney(input.purchasePrice)}/${roundMoney(input.sellingPrice)}, Qty ${Number(input.availableQty)}, Status ${input.status}`;
+      tx.set(
+        doc(db, 'audit_logs', makeSafeId('aud')),
+        cleanOptional({
+          action: isNew ? 'CREATE_PRODUCT' : 'UPDATE_PRODUCT',
+          module: 'products',
+          entityId: id,
+          entityLabel: input.name.trim().slice(0, 160),
+          details: `${isNew ? 'Created' : 'Updated'} product ${input.name} (${input.sku})`,
+          oldValue: oldSummary || undefined,
+          newValue: newSummary,
+          userId: actor.uid,
+          userName: actor.displayName.slice(0, 100),
+          userRole: actor.role,
+          orgId: ORG_ID,
+          isDemo: false,
+          createdAt: now,
+        })
+      );
     });
     return id;
   } catch (err) {
     handleFirestoreError(err, isNew ? OperationType.CREATE : OperationType.UPDATE, `products/${id}`);
+  }
+}
+
+export async function deleteProductSafe(
+  actor: ActorContext,
+  product: Product,
+  hasTransactions: boolean
+): Promise<void> {
+  if (actor.role !== 'owner') {
+    throw new Error('Only Owner / Super Admin can delete products.');
+  }
+  if (hasTransactions) {
+    throw new Error(
+      'This product is linked to purchases, sales, invoices, returns, or stock movements. Set status to Inactive instead of deleting.'
+    );
+  }
+  try {
+    await deleteDoc(doc(db, 'products', product.id));
+    await logAudit(
+      actor,
+      'DELETE_PRODUCT',
+      'products',
+      `Deleted unused product ${product.name} (${product.sku})`,
+      product.id,
+      product.name,
+      product.isDemo,
+      { oldValue: `${product.name} (${product.sku})`, newValue: 'DELETED' }
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `products/${product.id}`);
   }
 }
 
@@ -269,6 +319,7 @@ export async function saveSupplier(
     name: string;
     contactPerson?: string;
     phone: string;
+    whatsapp?: string;
     address?: string;
     gstin?: string;
     openingBalance: number;
@@ -290,6 +341,7 @@ export async function saveSupplier(
             name: input.name.trim().slice(0, 160),
             contactPerson: input.contactPerson?.trim().slice(0, 120),
             phone: input.phone.trim().slice(0, 24),
+            whatsapp: input.whatsapp?.trim().slice(0, 24),
             address: input.address?.trim().slice(0, 300),
             gstin: input.gstin?.trim().slice(0, 20),
             openingBalance: open,
@@ -315,6 +367,7 @@ export async function saveSupplier(
             name: input.name.trim().slice(0, 160),
             contactPerson: input.contactPerson?.trim().slice(0, 120) || '',
             phone: input.phone.trim().slice(0, 24),
+            whatsapp: input.whatsapp?.trim().slice(0, 24) || '',
             address: input.address?.trim().slice(0, 300) || '',
             gstin: input.gstin?.trim().slice(0, 20) || '',
             openingBalance: newOpen,
@@ -354,6 +407,7 @@ export async function saveShop(
     whatsapp?: string;
     address?: string;
     villageTown: string;
+    town?: string;
     blockArea: string;
     district: string;
     route?: string;
@@ -380,6 +434,7 @@ export async function saveShop(
             whatsapp: input.whatsapp?.trim().slice(0, 24),
             address: input.address?.trim().slice(0, 300),
             villageTown: input.villageTown.trim().slice(0, 100),
+            town: input.town?.trim().slice(0, 100),
             blockArea: input.blockArea.trim().slice(0, 100),
             district: input.district.trim().slice(0, 100),
             route: input.route?.trim().slice(0, 100),
@@ -413,6 +468,7 @@ export async function saveShop(
             whatsapp: input.whatsapp?.trim().slice(0, 24) || '',
             address: input.address?.trim().slice(0, 300) || '',
             villageTown: input.villageTown.trim().slice(0, 100),
+            town: input.town?.trim().slice(0, 100) || '',
             blockArea: input.blockArea.trim().slice(0, 100),
             district: input.district.trim().slice(0, 100),
             route: input.route?.trim().slice(0, 100) || '',
@@ -1896,7 +1952,15 @@ export async function saveSettings(
         location: input.location.trim().slice(0, 240),
         phone: input.phone?.trim().slice(0, 24),
         gstin: input.gstin?.trim().slice(0, 20),
+        logoUrl: input.logoUrl?.slice(0, 80000),
         invoicePrefix: input.invoicePrefix.trim().slice(0, 20),
+        invoiceSequence:
+          input.invoiceSequence !== undefined ? Math.max(0, Number(input.invoiceSequence) || 0) : undefined,
+        defaultPrintFormat: input.defaultPrintFormat,
+        defaultLowStockThreshold:
+          input.defaultLowStockThreshold !== undefined
+            ? Math.max(0, Number(input.defaultLowStockThreshold) || 0)
+            : undefined,
         allowNegativeStock: Boolean(input.allowNegativeStock),
         lastBackupAt: input.lastBackupAt,
         updatedAt: now,
@@ -1936,6 +2000,8 @@ export async function removeAllDemoData(actor: ActorContext): Promise<number> {
     'purchase_items',
     'sales',
     'sale_items',
+    'invoices',
+    'invoice_items',
     'stock_movements',
     'payments',
     'returns',
@@ -1965,5 +2031,670 @@ export async function removeAllDemoData(actor: ActorContext): Promise<number> {
     return deleted;
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, 'demo_cleanup');
+  }
+}
+
+// =========================================================
+// DIGITAL BILL BOOK (INVOICES & INVOICE_ITEMS)
+// =========================================================
+export interface BillLineInput {
+  productId: string;
+  description?: string;
+  qty: number;
+  rate: number;
+  discount: number;
+}
+
+function computeBillPaymentStatus(netTotal: number, paid: number): BillPaymentStatus {
+  if (paid >= netTotal - 0.01 && (netTotal > 0 || paid >= 0)) {
+    return 'paid';
+  }
+  if (paid > 0.01) return 'partial';
+  return 'unpaid';
+}
+
+export async function createBillInvoiceTransaction(
+  actor: ActorContext,
+  input: {
+    invoiceDate: string;
+    shopId: string;
+    items: BillLineInput[];
+    discount: number;
+    transportCharge: number;
+    paymentReceived: number;
+    paymentMethod: PaymentMethod;
+    notes?: string;
+    status: 'draft' | 'confirmed';
+    invoicePrefix?: string;
+    allowNegativeStock: boolean;
+  }
+): Promise<string> {
+  if (!input.items.length) throw new Error('Add at least one product line to create a bill.');
+  const invoiceId = makeSafeId('inv');
+  const shopRef = doc(db, 'shops', input.shopId);
+  const settingsRef = doc(db, 'settings', 'business_profile');
+
+  try {
+    await runTransaction(db, async (tx) => {
+      // 1. ALL READS FIRST
+      const shopSnap = await tx.get(shopRef);
+      if (!shopSnap.exists()) throw new Error('Selected shop not found.');
+      const shop = shopSnap.data() as Shop;
+
+      const settingsSnap = await tx.get(settingsRef);
+      const prodSnaps = await Promise.all(
+        input.items.map((it) => tx.get(doc(db, 'products', it.productId)))
+      );
+
+      // 2. VALIDATIONS & TOTALS
+      const now = serverTimestamp();
+      let subtotal = 0;
+      const computedLines = input.items.map((line, idx) => {
+        const pSnap = prodSnaps[idx];
+        if (!pSnap.exists()) throw new Error(`Product ${line.productId} not found.`);
+        const prod = pSnap.data() as Product;
+        const qty = Math.max(1, Number(line.qty) || 1);
+        const rate = Math.max(0, roundMoney(line.rate));
+        const lineDiscount = Math.max(0, roundMoney(line.discount));
+        const amount = Math.max(0, roundMoney(qty * rate - lineDiscount));
+        subtotal = roundMoney(subtotal + amount);
+
+        if (input.status === 'confirmed' && prod.availableQty < qty) {
+          if (!(input.allowNegativeStock && actor.role === 'owner')) {
+            throw new Error(
+              `Insufficient warehouse stock for ${prod.name}. Available: ${prod.availableQty}, Requested: ${qty}.`
+            );
+          }
+        }
+
+        return {
+          productId: line.productId,
+          prod,
+          description: line.description?.trim().slice(0, 300),
+          qty,
+          rate,
+          discount: lineDiscount,
+          amount,
+        };
+      });
+
+      const discount = Math.max(0, roundMoney(input.discount));
+      const transportCharge = Math.max(0, roundMoney(input.transportCharge));
+      const netTotal = Math.max(0, roundMoney(subtotal - discount + transportCharge));
+      const paymentReceived =
+        input.status === 'confirmed'
+          ? Math.min(netTotal, Math.max(0, roundMoney(input.paymentReceived)))
+          : Math.max(0, roundMoney(input.paymentReceived));
+      const remainingDue = roundMoney(netTotal - paymentReceived);
+      const paymentStatus = computeBillPaymentStatus(netTotal, paymentReceived);
+
+      const prefix = (input.invoicePrefix || 'PDP').trim().slice(0, 12);
+      let invoiceNumber = makeInvoiceNumber(`${prefix}-BILL`);
+      let nextSeq: number | null = null;
+      if (settingsSnap.exists()) {
+        const sData = settingsSnap.data();
+        const curSeq = Number(sData.invoiceSequence) || 1000;
+        nextSeq = curSeq + 1;
+        invoiceNumber = `${prefix}-${String(nextSeq).padStart(4, '0')}`;
+      }
+
+      const shopAddressText = [shop.address, shop.villageTown, shop.town, shop.blockArea, shop.district]
+        .filter(Boolean)
+        .join(', ');
+
+      // 3. ALL WRITES
+      tx.set(
+        doc(db, 'invoices', invoiceId),
+        cleanOptional({
+          invoiceNumber: invoiceNumber.slice(0, 64),
+          invoiceDate: input.invoiceDate,
+          shopId: input.shopId,
+          shopName: shop.shopName.slice(0, 160),
+          shopPhone: shop.mobile.slice(0, 24),
+          shopAddress: shopAddressText.slice(0, 300),
+          shopBlock: shop.blockArea.slice(0, 100),
+          status: input.status,
+          paymentStatus,
+          itemCount: computedLines.length,
+          subtotal,
+          discount,
+          transportCharge,
+          netTotal,
+          previousOutstanding: roundMoney(shop.currentOutstanding),
+          paymentReceived,
+          remainingDue,
+          paymentMethod: input.paymentMethod,
+          notes: input.notes?.trim().slice(0, 500),
+          orgId: ORG_ID,
+          isDemo: false,
+          createdAt: now,
+          updatedAt: now,
+          createdBy: actor.uid,
+          createdByName: actor.displayName.slice(0, 100),
+        })
+      );
+
+      for (const item of computedLines) {
+        tx.set(
+          doc(db, 'invoice_items', makeSafeId('invi')),
+          cleanOptional({
+            invoiceId,
+            productId: item.productId,
+            productName: item.prod.name.slice(0, 160),
+            description: item.description,
+            sku: item.prod.sku.slice(0, 64),
+            unit: item.prod.unit.slice(0, 32),
+            qty: item.qty,
+            rate: item.rate,
+            discount: item.discount,
+            amount: item.amount,
+            unitCost: roundMoney(item.prod.purchasePrice),
+            orgId: ORG_ID,
+            isDemo: false,
+            createdAt: now,
+            updatedAt: now,
+            createdBy: actor.uid,
+          })
+        );
+
+        if (input.status === 'confirmed') {
+          tx.update(doc(db, 'products', item.productId), {
+            availableQty: roundMoney(item.prod.availableQty - item.qty),
+            updatedAt: now,
+          });
+          tx.set(doc(db, 'stock_movements', makeSafeId('mov')), {
+            date: input.invoiceDate,
+            productId: item.productId,
+            productName: item.prod.name.slice(0, 160),
+            sku: item.prod.sku.slice(0, 64),
+            qty: item.qty,
+            movementType: 'stock_out',
+            direction: 'out',
+            referenceType: 'bill_invoice',
+            referenceId: invoiceId,
+            referenceNumber: invoiceNumber.slice(0, 64),
+            warehouseZone: item.prod.warehouseZone || 'Main Rack A',
+            notes: `Billed to ${shop.shopName} (${invoiceNumber})`,
+            orgId: ORG_ID,
+            isDemo: false,
+            createdAt: now,
+            createdBy: actor.uid,
+            createdByName: actor.displayName.slice(0, 100),
+          });
+        }
+      }
+
+      if (input.status === 'confirmed') {
+        tx.update(shopRef, {
+          totalPurchases: roundMoney(shop.totalPurchases + netTotal),
+          totalPayments: roundMoney(shop.totalPayments + paymentReceived),
+          currentOutstanding: roundMoney(shop.currentOutstanding + remainingDue),
+          lastDeliveryDate: input.invoiceDate,
+          updatedAt: now,
+        });
+
+        if (paymentReceived > 0) {
+          tx.set(doc(db, 'payments', makeSafeId('pay')), {
+            partyType: 'shop',
+            partyId: input.shopId,
+            partyName: shop.shopName.slice(0, 160),
+            receiptNumber: makeInvoiceNumber('RCPT'),
+            paymentDate: input.invoiceDate,
+            amount: paymentReceived,
+            method: input.paymentMethod,
+            paymentKind: remainingDue > 0.01 ? 'partial' : 'full',
+            linkedInvoiceId: invoiceId,
+            linkedInvoiceNo: invoiceNumber.slice(0, 64),
+            notes: `Payment on Bill ${invoiceNumber}`,
+            status: 'active',
+            orgId: ORG_ID,
+            isDemo: false,
+            createdAt: now,
+            updatedAt: now,
+            createdBy: actor.uid,
+            createdByName: actor.displayName.slice(0, 100),
+          });
+        }
+      }
+
+      if (settingsSnap.exists() && nextSeq !== null) {
+        tx.update(settingsRef, {
+          invoiceSequence: nextSeq,
+          updatedAt: now,
+          updatedBy: actor.uid,
+        });
+      }
+
+      tx.set(doc(db, 'audit_logs', makeSafeId('aud')), {
+        action: input.status === 'confirmed' ? 'CREATE_BILL_CONFIRMED' : 'CREATE_BILL_DRAFT',
+        module: 'billbook',
+        entityId: invoiceId,
+        entityLabel: invoiceNumber.slice(0, 160),
+        details: `${input.status === 'confirmed' ? 'Confirmed' : 'Saved draft'} bill ${invoiceNumber} for ${shop.shopName} (${netTotal} INR)`,
+        newValue: `Status: ${input.status}, Total: ${netTotal}, Paid: ${paymentReceived}`,
+        userId: actor.uid,
+        userName: actor.displayName.slice(0, 100),
+        userRole: actor.role,
+        orgId: ORG_ID,
+        isDemo: false,
+        createdAt: now,
+      });
+    });
+
+    return invoiceId;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, `invoices/${invoiceId}`);
+  }
+}
+
+export async function updateAndConfirmDraftBillTransaction(
+  actor: ActorContext,
+  invoice: BillInvoice,
+  existingItemIds: string[],
+  input: {
+    invoiceDate: string;
+    shopId: string;
+    items: BillLineInput[];
+    discount: number;
+    transportCharge: number;
+    paymentReceived: number;
+    paymentMethod: PaymentMethod;
+    notes?: string;
+    targetStatus: 'draft' | 'confirmed';
+    allowNegativeStock: boolean;
+  }
+): Promise<void> {
+  if (!input.items.length) throw new Error('Add at least one product line.');
+  const invRef = doc(db, 'invoices', invoice.id);
+  const shopRef = doc(db, 'shops', input.shopId);
+
+  try {
+    await runTransaction(db, async (tx) => {
+      // 1. ALL READS FIRST
+      const invSnap = await tx.get(invRef);
+      if (!invSnap.exists()) throw new Error('Invoice not found.');
+      const liveInv = invSnap.data() as BillInvoice;
+      if (liveInv.status !== 'draft') {
+        throw new Error('Only draft invoices can be edited.');
+      }
+
+      const shopSnap = await tx.get(shopRef);
+      if (!shopSnap.exists()) throw new Error('Selected shop not found.');
+      const shop = shopSnap.data() as Shop;
+
+      const prodSnaps = await Promise.all(
+        input.items.map((it) => tx.get(doc(db, 'products', it.productId)))
+      );
+
+      // 2. VALIDATE & COMPUTE
+      const now = serverTimestamp();
+      let subtotal = 0;
+      const computedLines = input.items.map((line, idx) => {
+        const pSnap = prodSnaps[idx];
+        if (!pSnap.exists()) throw new Error(`Product ${line.productId} not found.`);
+        const prod = pSnap.data() as Product;
+        const qty = Math.max(1, Number(line.qty) || 1);
+        const rate = Math.max(0, roundMoney(line.rate));
+        const lineDiscount = Math.max(0, roundMoney(line.discount));
+        const amount = Math.max(0, roundMoney(qty * rate - lineDiscount));
+        subtotal = roundMoney(subtotal + amount);
+
+        if (input.targetStatus === 'confirmed' && prod.availableQty < qty) {
+          if (!(input.allowNegativeStock && actor.role === 'owner')) {
+            throw new Error(
+              `Insufficient warehouse stock for ${prod.name}. Available: ${prod.availableQty}, Requested: ${qty}.`
+            );
+          }
+        }
+
+        return {
+          productId: line.productId,
+          prod,
+          description: line.description?.trim().slice(0, 300),
+          qty,
+          rate,
+          discount: lineDiscount,
+          amount,
+        };
+      });
+
+      const discount = Math.max(0, roundMoney(input.discount));
+      const transportCharge = Math.max(0, roundMoney(input.transportCharge));
+      const netTotal = Math.max(0, roundMoney(subtotal - discount + transportCharge));
+      const paymentReceived =
+        input.targetStatus === 'confirmed'
+          ? Math.min(netTotal, Math.max(0, roundMoney(input.paymentReceived)))
+          : Math.max(0, roundMoney(input.paymentReceived));
+      const remainingDue = roundMoney(netTotal - paymentReceived);
+      const paymentStatus = computeBillPaymentStatus(netTotal, paymentReceived);
+      const shopAddressText = [shop.address, shop.villageTown, shop.town, shop.blockArea, shop.district]
+        .filter(Boolean)
+        .join(', ');
+
+      // 3. ALL WRITES: Delete old items, insert new items, update invoice
+      for (const oldItemId of existingItemIds) {
+        tx.delete(doc(db, 'invoice_items', oldItemId));
+      }
+
+      for (const item of computedLines) {
+        tx.set(
+          doc(db, 'invoice_items', makeSafeId('invi')),
+          cleanOptional({
+            invoiceId: invoice.id,
+            productId: item.productId,
+            productName: item.prod.name.slice(0, 160),
+            description: item.description,
+            sku: item.prod.sku.slice(0, 64),
+            unit: item.prod.unit.slice(0, 32),
+            qty: item.qty,
+            rate: item.rate,
+            discount: item.discount,
+            amount: item.amount,
+            unitCost: roundMoney(item.prod.purchasePrice),
+            orgId: ORG_ID,
+            isDemo: Boolean(liveInv.isDemo),
+            createdAt: now,
+            updatedAt: now,
+            createdBy: actor.uid,
+          })
+        );
+
+        if (input.targetStatus === 'confirmed') {
+          tx.update(doc(db, 'products', item.productId), {
+            availableQty: roundMoney(item.prod.availableQty - item.qty),
+            updatedAt: now,
+          });
+          tx.set(doc(db, 'stock_movements', makeSafeId('mov')), {
+            date: input.invoiceDate,
+            productId: item.productId,
+            productName: item.prod.name.slice(0, 160),
+            sku: item.prod.sku.slice(0, 64),
+            qty: item.qty,
+            movementType: 'stock_out',
+            direction: 'out',
+            referenceType: 'bill_invoice',
+            referenceId: invoice.id,
+            referenceNumber: liveInv.invoiceNumber,
+            warehouseZone: item.prod.warehouseZone || 'Main Rack A',
+            notes: `Billed to ${shop.shopName} (${liveInv.invoiceNumber})`,
+            orgId: ORG_ID,
+            isDemo: Boolean(liveInv.isDemo),
+            createdAt: now,
+            createdBy: actor.uid,
+            createdByName: actor.displayName.slice(0, 100),
+          });
+        }
+      }
+
+      tx.update(
+        invRef,
+        cleanOptional({
+          invoiceDate: input.invoiceDate,
+          shopId: input.shopId,
+          shopName: shop.shopName.slice(0, 160),
+          shopPhone: shop.mobile.slice(0, 24),
+          shopAddress: shopAddressText.slice(0, 300),
+          shopBlock: shop.blockArea.slice(0, 100),
+          status: input.targetStatus,
+          paymentStatus,
+          itemCount: computedLines.length,
+          subtotal,
+          discount,
+          transportCharge,
+          netTotal,
+          previousOutstanding: roundMoney(shop.currentOutstanding),
+          paymentReceived,
+          remainingDue,
+          paymentMethod: input.paymentMethod,
+          notes: input.notes?.trim().slice(0, 500) || '',
+          updatedAt: now,
+        })
+      );
+
+      if (input.targetStatus === 'confirmed') {
+        tx.update(shopRef, {
+          totalPurchases: roundMoney(shop.totalPurchases + netTotal),
+          totalPayments: roundMoney(shop.totalPayments + paymentReceived),
+          currentOutstanding: roundMoney(shop.currentOutstanding + remainingDue),
+          lastDeliveryDate: input.invoiceDate,
+          updatedAt: now,
+        });
+
+        if (paymentReceived > 0) {
+          tx.set(doc(db, 'payments', makeSafeId('pay')), {
+            partyType: 'shop',
+            partyId: input.shopId,
+            partyName: shop.shopName.slice(0, 160),
+            receiptNumber: makeInvoiceNumber('RCPT'),
+            paymentDate: input.invoiceDate,
+            amount: paymentReceived,
+            method: input.paymentMethod,
+            paymentKind: remainingDue > 0.01 ? 'partial' : 'full',
+            linkedInvoiceId: invoice.id,
+            linkedInvoiceNo: liveInv.invoiceNumber,
+            notes: `Payment on Bill ${liveInv.invoiceNumber}`,
+            status: 'active',
+            orgId: ORG_ID,
+            isDemo: Boolean(liveInv.isDemo),
+            createdAt: now,
+            updatedAt: now,
+            createdBy: actor.uid,
+            createdByName: actor.displayName.slice(0, 100),
+          });
+        }
+      }
+
+      tx.set(doc(db, 'audit_logs', makeSafeId('aud')), {
+        action: input.targetStatus === 'confirmed' ? 'CONFIRM_DRAFT_BILL' : 'UPDATE_DRAFT_BILL',
+        module: 'billbook',
+        entityId: invoice.id,
+        entityLabel: liveInv.invoiceNumber,
+        details: `${input.targetStatus === 'confirmed' ? 'Confirmed' : 'Updated'} draft bill ${liveInv.invoiceNumber} (${netTotal} INR)`,
+        oldValue: `Status: draft, Total: ${liveInv.netTotal}`,
+        newValue: `Status: ${input.targetStatus}, Total: ${netTotal}, Paid: ${paymentReceived}`,
+        userId: actor.uid,
+        userName: actor.displayName.slice(0, 100),
+        userRole: actor.role,
+        orgId: ORG_ID,
+        isDemo: Boolean(liveInv.isDemo),
+        createdAt: now,
+      });
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `invoices/${invoice.id}`);
+  }
+}
+
+export async function recordBillPaymentTransaction(
+  actor: ActorContext,
+  invoiceId: string,
+  amount: number,
+  paymentDate: string,
+  method: PaymentMethod,
+  referenceNo?: string,
+  notes?: string
+): Promise<string> {
+  const invRef = doc(db, 'invoices', invoiceId);
+  const payId = makeSafeId('pay');
+
+  try {
+    await runTransaction(db, async (tx) => {
+      const invSnap = await tx.get(invRef);
+      if (!invSnap.exists()) throw new Error('Bill invoice not found.');
+      const inv = invSnap.data() as BillInvoice;
+      if (inv.status !== 'confirmed') throw new Error('Only confirmed bills can accept payments.');
+
+      const shopRef = doc(db, 'shops', inv.shopId);
+      const shopSnap = await tx.get(shopRef);
+      if (!shopSnap.exists()) throw new Error('Shop not found.');
+      const shop = shopSnap.data() as Shop;
+
+      const payAmt = Math.min(Math.max(0.01, roundMoney(amount)), Math.max(0.01, roundMoney(inv.remainingDue)));
+      const newPaid = roundMoney(inv.paymentReceived + payAmt);
+      const newDue = roundMoney(inv.netTotal - newPaid);
+      const newPayStatus = computeBillPaymentStatus(inv.netTotal, newPaid);
+      const receiptNumber = makeInvoiceNumber('RCPT');
+      const now = serverTimestamp();
+
+      tx.update(invRef, {
+        paymentReceived: newPaid,
+        remainingDue: newDue,
+        paymentStatus: newPayStatus,
+        paymentMethod: method,
+        updatedAt: now,
+      });
+
+      tx.update(shopRef, {
+        totalPayments: roundMoney(shop.totalPayments + payAmt),
+        currentOutstanding: roundMoney(shop.currentOutstanding - payAmt),
+        updatedAt: now,
+      });
+
+      tx.set(
+        doc(db, 'payments', payId),
+        cleanOptional({
+          partyType: 'shop',
+          partyId: inv.shopId,
+          partyName: shop.shopName.slice(0, 160),
+          receiptNumber,
+          paymentDate,
+          amount: payAmt,
+          method,
+          paymentKind: newDue > 0.01 ? 'partial' : 'full',
+          referenceNo: referenceNo?.trim().slice(0, 80),
+          linkedInvoiceId: invoiceId,
+          linkedInvoiceNo: inv.invoiceNumber,
+          notes: notes?.trim().slice(0, 500) || `Payment against Bill ${inv.invoiceNumber}`,
+          status: 'active',
+          orgId: ORG_ID,
+          isDemo: Boolean(inv.isDemo),
+          createdAt: now,
+          updatedAt: now,
+          createdBy: actor.uid,
+          createdByName: actor.displayName.slice(0, 100),
+        })
+      );
+
+      tx.set(doc(db, 'audit_logs', makeSafeId('aud')), {
+        action: 'BILL_PAYMENT',
+        module: 'billbook',
+        entityId: invoiceId,
+        entityLabel: inv.invoiceNumber,
+        details: `Collected ${payAmt} INR against Bill ${inv.invoiceNumber} (${receiptNumber})`,
+        oldValue: `Paid: ${inv.paymentReceived}, Due: ${inv.remainingDue}`,
+        newValue: `Paid: ${newPaid}, Due: ${newDue}`,
+        userId: actor.uid,
+        userName: actor.displayName.slice(0, 100),
+        userRole: actor.role,
+        orgId: ORG_ID,
+        isDemo: Boolean(inv.isDemo),
+        createdAt: now,
+      });
+    });
+    return payId;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `invoices/${invoiceId}`);
+  }
+}
+
+export async function cancelBillInvoiceTransaction(
+  actor: ActorContext,
+  invoice: BillInvoice,
+  items: BillInvoiceItem[],
+  reason: string
+): Promise<void> {
+  if (actor.role !== 'owner' && actor.role !== 'accounts') {
+    throw new Error('Only Owner or Accounts Staff can cancel an invoice.');
+  }
+  const invRef = doc(db, 'invoices', invoice.id);
+  const shopRef = doc(db, 'shops', invoice.shopId);
+
+  try {
+    await runTransaction(db, async (tx) => {
+      // 1. ALL READS FIRST
+      const invSnap = await tx.get(invRef);
+      if (!invSnap.exists()) throw new Error('Bill invoice not found.');
+      const liveInv = invSnap.data() as BillInvoice;
+      if (liveInv.status === 'cancelled') throw new Error('Invoice is already cancelled.');
+
+      const shopSnap = liveInv.status === 'confirmed' ? await tx.get(shopRef) : null;
+      const prodSnaps =
+        liveInv.status === 'confirmed'
+          ? await Promise.all(items.map((it) => tx.get(doc(db, 'products', it.productId))))
+          : [];
+
+      const now = serverTimestamp();
+      const today = new Date().toISOString().slice(0, 10);
+
+      // 2. RESTORE STOCK & LEDGERS IF CONFIRMED
+      if (liveInv.status === 'confirmed') {
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          const pSnap = prodSnaps[i];
+          if (pSnap && pSnap.exists()) {
+            const prod = pSnap.data() as Product;
+            tx.update(doc(db, 'products', it.productId), {
+              availableQty: roundMoney(prod.availableQty + it.qty),
+              updatedAt: now,
+            });
+            tx.set(doc(db, 'stock_movements', makeSafeId('mov')), {
+              date: today,
+              productId: it.productId,
+              productName: it.productName.slice(0, 160),
+              sku: it.sku.slice(0, 64),
+              qty: it.qty,
+              movementType: 'stock_in',
+              direction: 'in',
+              referenceType: 'bill_cancelled',
+              referenceId: invoice.id,
+              referenceNumber: liveInv.invoiceNumber,
+              warehouseZone: prod.warehouseZone || 'Main Rack A',
+              notes: `Stock restored from cancelled Bill ${liveInv.invoiceNumber}: ${reason}`,
+              orgId: ORG_ID,
+              isDemo: Boolean(liveInv.isDemo),
+              createdAt: now,
+              createdBy: actor.uid,
+              createdByName: actor.displayName.slice(0, 100),
+            });
+          }
+        }
+
+        if (shopSnap && shopSnap.exists()) {
+          const shop = shopSnap.data() as Shop;
+          tx.update(shopRef, {
+            totalPurchases: Math.max(0, roundMoney(shop.totalPurchases - liveInv.netTotal)),
+            totalPayments: Math.max(0, roundMoney(shop.totalPayments - liveInv.paymentReceived)),
+            currentOutstanding: roundMoney(shop.currentOutstanding - liveInv.remainingDue),
+            updatedAt: now,
+          });
+        }
+      }
+
+      tx.update(invRef, {
+        status: 'cancelled',
+        cancelledReason: reason.trim().slice(0, 300),
+        cancelledBy: actor.uid,
+        updatedAt: now,
+      });
+
+      tx.set(doc(db, 'audit_logs', makeSafeId('aud')), {
+        action: 'CANCEL_BILL',
+        module: 'billbook',
+        entityId: invoice.id,
+        entityLabel: liveInv.invoiceNumber,
+        details: `Cancelled Bill ${liveInv.invoiceNumber} (${liveInv.netTotal} INR). Reason: ${reason}`,
+        oldValue: `Status: ${liveInv.status}`,
+        newValue: 'Status: cancelled',
+        notes: reason.trim().slice(0, 500),
+        userId: actor.uid,
+        userName: actor.displayName.slice(0, 100),
+        userRole: actor.role,
+        orgId: ORG_ID,
+        isDemo: Boolean(liveInv.isDemo),
+        createdAt: now,
+      });
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `invoices/${invoice.id}`);
   }
 }

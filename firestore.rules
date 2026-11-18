@@ -141,12 +141,13 @@ service cloud.firestore {
 
     function isValidProduct(data) {
       return data.keys().hasAll(['name', 'sku', 'category', 'purchasePrice', 'sellingPrice', 'minStockAlert', 'availableQty', 'damagedQty', 'unit', 'status', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
-        && data.keys().hasOnly(['name', 'sku', 'barcode', 'brand', 'category', 'imageUrl', 'purchasePrice', 'sellingPrice', 'minStockAlert', 'availableQty', 'damagedQty', 'unit', 'status', 'warehouseZone', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
+        && data.keys().hasOnly(['name', 'sku', 'barcode', 'brand', 'category', 'description', 'imageUrl', 'purchasePrice', 'sellingPrice', 'minStockAlert', 'availableQty', 'damagedQty', 'unit', 'status', 'warehouseZone', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
         && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
         && data.sku is string && data.sku.size() >= 1 && data.sku.size() <= 64
         && (!('barcode' in data) || (data.barcode is string && data.barcode.size() <= 64))
         && (!('brand' in data) || (data.brand is string && data.brand.size() <= 80))
         && data.category is string && data.category.size() >= 1 && data.category.size() <= 80
+        && (!('description' in data) || (data.description is string && data.description.size() <= 500))
         && (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 80000))
         && data.purchasePrice is number && data.purchasePrice >= 0
         && data.sellingPrice is number && data.sellingPrice >= 0
@@ -183,10 +184,11 @@ service cloud.firestore {
 
     function isValidSupplier(data) {
       return data.keys().hasAll(['name', 'phone', 'openingBalance', 'totalPurchases', 'totalPayments', 'totalReturns', 'outstandingPayable', 'status', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
-        && data.keys().hasOnly(['name', 'contactPerson', 'phone', 'address', 'gstin', 'openingBalance', 'totalPurchases', 'totalPayments', 'totalReturns', 'outstandingPayable', 'status', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
+        && data.keys().hasOnly(['name', 'contactPerson', 'phone', 'whatsapp', 'address', 'gstin', 'openingBalance', 'totalPurchases', 'totalPayments', 'totalReturns', 'outstandingPayable', 'status', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
         && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
         && (!('contactPerson' in data) || (data.contactPerson is string && data.contactPerson.size() <= 120))
         && data.phone is string && data.phone.size() >= 6 && data.phone.size() <= 24
+        && (!('whatsapp' in data) || (data.whatsapp is string && data.whatsapp.size() <= 24))
         && (!('address' in data) || (data.address is string && data.address.size() <= 300))
         && (!('gstin' in data) || (data.gstin is string && data.gstin.size() <= 20))
         && data.openingBalance is number
@@ -204,13 +206,14 @@ service cloud.firestore {
 
     function isValidShop(data) {
       return data.keys().hasAll(['shopName', 'ownerName', 'mobile', 'villageTown', 'blockArea', 'district', 'openingBalance', 'creditLimit', 'totalPurchases', 'totalPayments', 'totalReturns', 'totalCreditNotes', 'currentOutstanding', 'status', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
-        && data.keys().hasOnly(['shopName', 'ownerName', 'mobile', 'whatsapp', 'address', 'villageTown', 'blockArea', 'district', 'route', 'openingBalance', 'creditLimit', 'totalPurchases', 'totalPayments', 'totalReturns', 'totalCreditNotes', 'currentOutstanding', 'lastDeliveryDate', 'status', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
+        && data.keys().hasOnly(['shopName', 'ownerName', 'mobile', 'whatsapp', 'address', 'villageTown', 'town', 'blockArea', 'district', 'route', 'openingBalance', 'creditLimit', 'totalPurchases', 'totalPayments', 'totalReturns', 'totalCreditNotes', 'currentOutstanding', 'lastDeliveryDate', 'status', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
         && data.shopName is string && data.shopName.size() >= 1 && data.shopName.size() <= 160
         && data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 120
         && data.mobile is string && data.mobile.size() >= 6 && data.mobile.size() <= 24
         && (!('whatsapp' in data) || (data.whatsapp is string && data.whatsapp.size() <= 24))
         && (!('address' in data) || (data.address is string && data.address.size() <= 300))
         && data.villageTown is string && data.villageTown.size() >= 1 && data.villageTown.size() <= 100
+        && (!('town' in data) || (data.town is string && data.town.size() <= 100))
         && data.blockArea is string && data.blockArea.size() >= 1 && data.blockArea.size() <= 100
         && data.district is string && data.district.size() >= 1 && data.district.size() <= 100
         && (!('route' in data) || (data.route is string && data.route.size() <= 100))
@@ -330,6 +333,59 @@ service cloud.firestore {
         && data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128;
     }
 
+    function isValidBillInvoice(data) {
+      return data.keys().hasAll(['invoiceNumber', 'invoiceDate', 'shopId', 'shopName', 'status', 'paymentStatus', 'itemCount', 'subtotal', 'discount', 'transportCharge', 'netTotal', 'previousOutstanding', 'paymentReceived', 'remainingDue', 'paymentMethod', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy', 'createdByName'])
+        && data.keys().hasOnly(['invoiceNumber', 'invoiceDate', 'shopId', 'shopName', 'shopPhone', 'shopAddress', 'shopBlock', 'status', 'paymentStatus', 'itemCount', 'subtotal', 'discount', 'transportCharge', 'netTotal', 'previousOutstanding', 'paymentReceived', 'remainingDue', 'paymentMethod', 'notes', 'cancelledReason', 'cancelledBy', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy', 'createdByName'])
+        && data.invoiceNumber is string && data.invoiceNumber.size() >= 1 && data.invoiceNumber.size() <= 64
+        && data.invoiceDate is string && data.invoiceDate.size() >= 8 && data.invoiceDate.size() <= 32
+        && isValidId(data.shopId)
+        && data.shopName is string && data.shopName.size() >= 1 && data.shopName.size() <= 160
+        && (!('shopPhone' in data) || (data.shopPhone is string && data.shopPhone.size() <= 24))
+        && (!('shopAddress' in data) || (data.shopAddress is string && data.shopAddress.size() <= 300))
+        && (!('shopBlock' in data) || (data.shopBlock is string && data.shopBlock.size() <= 100))
+        && data.status in ['draft', 'confirmed', 'cancelled']
+        && data.paymentStatus in ['paid', 'partial', 'unpaid']
+        && data.itemCount is number && data.itemCount >= 1
+        && data.subtotal is number && data.subtotal >= 0
+        && data.discount is number && data.discount >= 0
+        && data.transportCharge is number && data.transportCharge >= 0
+        && data.netTotal is number && data.netTotal >= 0
+        && data.previousOutstanding is number
+        && data.paymentReceived is number && data.paymentReceived >= 0
+        && data.remainingDue is number
+        && data.paymentMethod in ['cash', 'upi', 'bank_transfer', 'other']
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && (!('cancelledReason' in data) || (data.cancelledReason is string && data.cancelledReason.size() <= 300))
+        && (!('cancelledBy' in data) || (data.cancelledBy is string && data.cancelledBy.size() <= 128))
+        && isValidOrg(data)
+        && data.isDemo is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128
+        && data.createdByName is string && data.createdByName.size() >= 1 && data.createdByName.size() <= 100;
+    }
+
+    function isValidBillInvoiceItem(data) {
+      return data.keys().hasAll(['invoiceId', 'productId', 'productName', 'sku', 'unit', 'qty', 'rate', 'discount', 'amount', 'unitCost', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
+        && data.keys().hasOnly(['invoiceId', 'productId', 'productName', 'description', 'sku', 'unit', 'qty', 'rate', 'discount', 'amount', 'unitCost', 'orgId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'])
+        && isValidId(data.invoiceId)
+        && isValidId(data.productId)
+        && data.productName is string && data.productName.size() >= 1 && data.productName.size() <= 160
+        && (!('description' in data) || (data.description is string && data.description.size() <= 300))
+        && data.sku is string && data.sku.size() >= 1 && data.sku.size() <= 64
+        && data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 32
+        && data.qty is number && data.qty > 0
+        && data.rate is number && data.rate >= 0
+        && data.discount is number && data.discount >= 0
+        && data.amount is number && data.amount >= 0
+        && data.unitCost is number && data.unitCost >= 0
+        && isValidOrg(data)
+        && data.isDemo is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128;
+    }
+
     function isValidStockMovement(data) {
       return data.keys().hasAll(['date', 'productId', 'productName', 'sku', 'qty', 'movementType', 'direction', 'orgId', 'isDemo', 'createdAt', 'createdBy', 'createdByName'])
         && data.keys().hasOnly(['date', 'productId', 'productName', 'sku', 'qty', 'movementType', 'direction', 'referenceType', 'referenceId', 'referenceNumber', 'warehouseZone', 'notes', 'orgId', 'isDemo', 'createdAt', 'createdBy', 'createdByName'])
@@ -407,12 +463,15 @@ service cloud.firestore {
 
     function isValidAuditLog(data) {
       return data.keys().hasAll(['action', 'module', 'details', 'userId', 'userName', 'userRole', 'orgId', 'isDemo', 'createdAt'])
-        && data.keys().hasOnly(['action', 'module', 'entityId', 'entityLabel', 'details', 'userId', 'userName', 'userRole', 'orgId', 'isDemo', 'createdAt'])
+        && data.keys().hasOnly(['action', 'module', 'entityId', 'entityLabel', 'details', 'oldValue', 'newValue', 'notes', 'userId', 'userName', 'userRole', 'orgId', 'isDemo', 'createdAt'])
         && data.action is string && data.action.size() >= 1 && data.action.size() <= 80
         && data.module is string && data.module.size() >= 1 && data.module.size() <= 60
         && (!('entityId' in data) || (data.entityId is string && data.entityId.size() <= 128))
         && (!('entityLabel' in data) || (data.entityLabel is string && data.entityLabel.size() <= 160))
         && data.details is string && data.details.size() >= 1 && data.details.size() <= 500
+        && (!('oldValue' in data) || (data.oldValue is string && data.oldValue.size() <= 500))
+        && (!('newValue' in data) || (data.newValue is string && data.newValue.size() <= 500))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
         && data.userId is string && data.userId == request.auth.uid
         && data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100
         && isValidRole(data.userRole)
@@ -423,13 +482,17 @@ service cloud.firestore {
 
     function isValidSettings(data) {
       return data.keys().hasAll(['businessName', 'appName', 'location', 'invoicePrefix', 'allowNegativeStock', 'orgId', 'updatedAt', 'updatedBy'])
-        && data.keys().hasOnly(['businessName', 'appName', 'location', 'phone', 'gstin', 'invoicePrefix', 'allowNegativeStock', 'lastBackupAt', 'orgId', 'updatedAt', 'updatedBy'])
+        && data.keys().hasOnly(['businessName', 'appName', 'location', 'phone', 'gstin', 'logoUrl', 'invoicePrefix', 'invoiceSequence', 'defaultPrintFormat', 'defaultLowStockThreshold', 'allowNegativeStock', 'lastBackupAt', 'orgId', 'updatedAt', 'updatedBy'])
         && data.businessName is string && data.businessName.size() >= 1 && data.businessName.size() <= 160
         && data.appName is string && data.appName.size() >= 1 && data.appName.size() <= 160
         && data.location is string && data.location.size() >= 1 && data.location.size() <= 240
         && (!('phone' in data) || (data.phone is string && data.phone.size() <= 24))
         && (!('gstin' in data) || (data.gstin is string && data.gstin.size() <= 20))
+        && (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 80000))
         && data.invoicePrefix is string && data.invoicePrefix.size() >= 1 && data.invoicePrefix.size() <= 20
+        && (!('invoiceSequence' in data) || (data.invoiceSequence is number && data.invoiceSequence >= 0))
+        && (!('defaultPrintFormat' in data) || data.defaultPrintFormat in ['a4', 'a5', '80mm', '58mm'])
+        && (!('defaultLowStockThreshold' in data) || (data.defaultLowStockThreshold is number && data.defaultLowStockThreshold >= 0))
         && data.allowNegativeStock is bool
         && (!('lastBackupAt' in data) || (data.lastBackupAt is string && data.lastBackupAt.size() <= 64))
         && isValidOrg(data)
@@ -518,10 +581,11 @@ service cloud.firestore {
         && incoming().createdBy == existing().createdBy
         && incoming().updatedAt == request.time
         && (
-          (canManageProducts() && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'sku', 'barcode', 'brand', 'category', 'imageUrl', 'purchasePrice', 'sellingPrice', 'minStockAlert', 'availableQty', 'damagedQty', 'unit', 'status', 'warehouseZone', 'updatedAt']))
+          (canManageProducts() && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'sku', 'barcode', 'brand', 'category', 'description', 'imageUrl', 'purchasePrice', 'sellingPrice', 'minStockAlert', 'availableQty', 'damagedQty', 'unit', 'status', 'warehouseZone', 'updatedAt']))
           || (canManageSales() && incoming().diff(existing()).affectedKeys().hasOnly(['availableQty', 'damagedQty', 'updatedAt']))
+          || (canReverseFinancials() && incoming().diff(existing()).affectedKeys().hasOnly(['availableQty', 'updatedAt']))
         );
-      allow delete: if isValidId(productId) && isOwner() && existing().isDemo == true;
+      allow delete: if isValidId(productId) && isOwner();
     }
 
     match /stock_batches/{batchId} {
@@ -563,7 +627,7 @@ service cloud.firestore {
         && incoming().createdBy == existing().createdBy
         && incoming().updatedAt == request.time
         && (
-          (canManageSuppliers() && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'contactPerson', 'phone', 'address', 'gstin', 'openingBalance', 'totalPurchases', 'totalPayments', 'totalReturns', 'outstandingPayable', 'status', 'updatedAt']))
+          (canManageSuppliers() && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'contactPerson', 'phone', 'whatsapp', 'address', 'gstin', 'openingBalance', 'totalPurchases', 'totalPayments', 'totalReturns', 'outstandingPayable', 'status', 'updatedAt']))
           || (canManageSales() && incoming().diff(existing()).affectedKeys().hasOnly(['totalPurchases', 'totalPayments', 'outstandingPayable', 'updatedAt']))
         );
       allow delete: if isValidId(supplierId) && isOwner() && existing().isDemo == true;
@@ -607,7 +671,7 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------
-    // Shops & Sales / Deliveries
+    // Shops, Sales / Deliveries & Digital Bill Book
     // ---------------------------------------------------------
     match /shops/{shopId} {
       allow get: if isValidId(shopId) && canManageShops();
@@ -624,7 +688,7 @@ service cloud.firestore {
         && incoming().createdBy == existing().createdBy
         && incoming().updatedAt == request.time
         && (
-          (canManageShops() && incoming().diff(existing()).affectedKeys().hasOnly(['shopName', 'ownerName', 'mobile', 'whatsapp', 'address', 'villageTown', 'blockArea', 'district', 'route', 'openingBalance', 'creditLimit', 'totalPurchases', 'totalPayments', 'totalReturns', 'totalCreditNotes', 'currentOutstanding', 'lastDeliveryDate', 'status', 'updatedAt']))
+          (canManageShops() && incoming().diff(existing()).affectedKeys().hasOnly(['shopName', 'ownerName', 'mobile', 'whatsapp', 'address', 'villageTown', 'town', 'blockArea', 'district', 'route', 'openingBalance', 'creditLimit', 'totalPurchases', 'totalPayments', 'totalReturns', 'totalCreditNotes', 'currentOutstanding', 'lastDeliveryDate', 'status', 'updatedAt']))
           || (canManageReturns() && incoming().diff(existing()).affectedKeys().hasOnly(['totalReturns', 'currentOutstanding', 'updatedAt']))
         );
       allow delete: if isValidId(shopId) && isOwner() && existing().isDemo == true;
@@ -676,6 +740,51 @@ service cloud.firestore {
       allow delete: if isValidId(itemId) && isOwner() && existing().isDemo == true;
     }
 
+    match /invoices/{invoiceId} {
+      allow get: if isValidId(invoiceId) && canReadSales();
+      allow list: if canReadSales() && resource.data.orgId == 'pramanik_digital_point';
+      allow create: if isValidId(invoiceId)
+        && canManageSales()
+        && isValidBillInvoice(incoming())
+        && exists(/databases/$(database)/documents/shops/$(incoming().shopId))
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(invoiceId)
+        && isValidBillInvoice(incoming())
+        && incoming().invoiceNumber == existing().invoiceNumber
+        && incoming().createdAt == existing().createdAt
+        && incoming().createdBy == existing().createdBy
+        && incoming().updatedAt == request.time
+        && (
+          (existing().status == 'draft' && canManageSales() && incoming().diff(existing()).affectedKeys().hasOnly(['invoiceDate', 'shopId', 'shopName', 'shopPhone', 'shopAddress', 'shopBlock', 'status', 'paymentStatus', 'itemCount', 'subtotal', 'discount', 'transportCharge', 'netTotal', 'previousOutstanding', 'paymentReceived', 'remainingDue', 'paymentMethod', 'notes', 'updatedAt']))
+          || (existing().status == 'confirmed' && (canManageSales() || canManagePayments()) && incoming().status == 'confirmed' && incoming().diff(existing()).affectedKeys().hasOnly(['paymentStatus', 'paymentReceived', 'remainingDue', 'paymentMethod', 'notes', 'updatedAt']))
+          || (existing().status in ['draft', 'confirmed'] && (isOwner() || canReverseFinancials()) && incoming().status == 'cancelled' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'cancelledReason', 'cancelledBy', 'updatedAt']))
+        );
+      allow delete: if isValidId(invoiceId) && isOwner() && existing().isDemo == true;
+    }
+
+    match /invoice_items/{itemId} {
+      allow get: if isValidId(itemId) && canReadSales();
+      allow list: if canReadSales() && resource.data.orgId == 'pramanik_digital_point';
+      allow create: if isValidId(itemId)
+        && canManageSales()
+        && isValidBillInvoiceItem(incoming())
+        && exists(/databases/$(database)/documents/products/$(incoming().productId))
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(itemId)
+        && canManageSales()
+        && isValidBillInvoiceItem(incoming())
+        && incoming().invoiceId == existing().invoiceId
+        && incoming().createdAt == existing().createdAt
+        && incoming().createdBy == existing().createdBy
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['productId', 'productName', 'description', 'sku', 'unit', 'qty', 'rate', 'discount', 'amount', 'unitCost', 'updatedAt']);
+      allow delete: if isValidId(itemId) && ((isOwner() && existing().isDemo == true) || canManageSales());
+    }
+
     // ---------------------------------------------------------
     // Warehouse Movements, Payments, Returns & Audit Logs
     // ---------------------------------------------------------
@@ -683,7 +792,7 @@ service cloud.firestore {
       allow get: if isValidId(movementId) && isActiveStaff();
       allow list: if isActiveStaff() && resource.data.orgId == 'pramanik_digital_point';
       allow create: if isValidId(movementId)
-        && canManageStock()
+        && (canManageStock() || canReverseFinancials())
         && isValidStockMovement(incoming())
         && exists(/databases/$(database)/documents/products/$(incoming().productId))
         && incoming().createdBy == request.auth.uid
@@ -764,11 +873,13 @@ service cloud.firestore {
         && isValidSettings(incoming())
         && incoming().updatedAt == request.time;
       allow update: if isValidId(settingId)
-        && isOwner()
         && isValidSettings(incoming())
         && incoming().orgId == existing().orgId
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['businessName', 'appName', 'location', 'phone', 'gstin', 'invoicePrefix', 'allowNegativeStock', 'lastBackupAt', 'updatedAt', 'updatedBy']);
+        && (
+          (isOwner() && incoming().diff(existing()).affectedKeys().hasOnly(['businessName', 'appName', 'location', 'phone', 'gstin', 'logoUrl', 'invoicePrefix', 'invoiceSequence', 'defaultPrintFormat', 'defaultLowStockThreshold', 'allowNegativeStock', 'lastBackupAt', 'updatedAt', 'updatedBy']))
+          || (canManageSales() && incoming().diff(existing()).affectedKeys().hasOnly(['invoiceSequence', 'updatedAt', 'updatedBy']))
+        );
       allow delete: if false;
     }
   }

@@ -34,20 +34,20 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B1221]/55 p-4 backdrop-blur-[2px]"
       role="dialog"
       aria-modal="true"
     >
-      <div className={`w-full ${widthClass} max-h-[92vh] flex flex-col rounded-xl border border-slate-200 bg-white shadow-xl`}>
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
+      <div className={`w-full ${widthClass} max-h-[92vh] flex flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-2xl`}>
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 bg-slate-50/75 px-6 py-4">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+            <h2 className="font-display text-base font-bold text-[#0B1221]">{title}</h2>
             {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
             aria-label="Close modal"
           >
             <X className="h-5 w-5" />

@@ -129,8 +129,8 @@ export const WarehouseView: React.FC = () => {
             <button
               type="button"
               onClick={() => setTab('inventory')}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-                tab === 'inventory' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'
+              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium ${
+                tab === 'inventory' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600'
               }`}
             >
               Warehouse Stock Report
@@ -138,8 +138,8 @@ export const WarehouseView: React.FC = () => {
             <button
               type="button"
               onClick={() => setTab('ledger')}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-                tab === 'ledger' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'
+              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium ${
+                tab === 'ledger' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600'
               }`}
             >
               Product Stock Movement Ledger
@@ -190,7 +190,7 @@ export const WarehouseView: React.FC = () => {
           <button
             type="button"
             onClick={handleExportWarehouse}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
           >
             <Download className="h-3.5 w-3.5" />
             <span>Export Stock</span>
@@ -200,7 +200,7 @@ export const WarehouseView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => openOperation('verification')}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
               >
                 <ClipboardCheck className="h-3.5 w-3.5" />
                 <span>Physical Verification</span>
@@ -208,7 +208,7 @@ export const WarehouseView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => openOperation('stock_in')}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Stock Movement / Adjust</span>

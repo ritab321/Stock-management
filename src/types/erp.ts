@@ -2,6 +2,7 @@ import type { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'owner' | 'manager' | 'sales' | 'accounts' | 'stock';
 export type Language = 'en' | 'bn';
+export type PrintFormat = 'a4' | 'a5' | '80mm' | '58mm';
 
 export interface UserProfile {
   id: string;
@@ -38,6 +39,7 @@ export interface Product {
   barcode?: string;
   brand?: string;
   category: string;
+  description?: string;
   imageUrl?: string;
   purchasePrice: number;
   sellingPrice: number;
@@ -76,6 +78,7 @@ export interface Supplier {
   name: string;
   contactPerson?: string;
   phone: string;
+  whatsapp?: string;
   address?: string;
   gstin?: string;
   openingBalance: number;
@@ -99,6 +102,7 @@ export interface Shop {
   whatsapp?: string;
   address?: string;
   villageTown: string;
+  town?: string;
   blockArea: string;
   district: string;
   route?: string;
@@ -219,6 +223,60 @@ export interface SaleItem {
   createdBy: string;
 }
 
+export type BillStatus = 'draft' | 'confirmed' | 'cancelled';
+export type BillPaymentStatus = 'paid' | 'partial' | 'unpaid';
+
+export interface BillInvoice {
+  id: string;
+  invoiceNumber: string;
+  invoiceDate: string; // YYYY-MM-DD
+  shopId: string;
+  shopName: string;
+  shopPhone?: string;
+  shopAddress?: string;
+  shopBlock?: string;
+  status: BillStatus;
+  paymentStatus: BillPaymentStatus;
+  itemCount: number;
+  subtotal: number;
+  discount: number;
+  transportCharge: number;
+  netTotal: number;
+  previousOutstanding: number;
+  paymentReceived: number;
+  remainingDue: number;
+  paymentMethod: PaymentMethod;
+  notes?: string;
+  cancelledReason?: string;
+  cancelledBy?: string;
+  orgId: string;
+  isDemo: boolean;
+  createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+  createdBy: string;
+  createdByName: string;
+}
+
+export interface BillInvoiceItem {
+  id: string;
+  invoiceId: string;
+  productId: string;
+  productName: string;
+  description?: string;
+  sku: string;
+  unit: string;
+  qty: number;
+  rate: number;
+  discount: number;
+  amount: number;
+  unitCost: number;
+  orgId: string;
+  isDemo: boolean;
+  createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+  createdBy: string;
+}
+
 export type MovementType =
   | 'stock_in'
   | 'stock_out'
@@ -313,6 +371,9 @@ export interface AuditLog {
   entityId?: string;
   entityLabel?: string;
   details: string;
+  oldValue?: string;
+  newValue?: string;
+  notes?: string;
   userId: string;
   userName: string;
   userRole: UserRole;
@@ -328,7 +389,11 @@ export interface AppSettings {
   location: string;
   phone?: string;
   gstin?: string;
+  logoUrl?: string;
   invoicePrefix: string;
+  invoiceSequence?: number;
+  defaultPrintFormat?: PrintFormat;
+  defaultLowStockThreshold?: number;
   allowNegativeStock: boolean;
   lastBackupAt?: string;
   orgId: string;
@@ -360,7 +425,9 @@ export type NavTab =
   | 'warehouse'
   | 'shops'
   | 'sales'
+  | 'billbook'
   | 'payments'
+  | 'outstanding'
   | 'returns'
   | 'ledgers'
   | 'reports'

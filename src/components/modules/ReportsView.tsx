@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Download } from 'lucide-react';
+import { Download, MapPin } from 'lucide-react';
 import { useErp } from '../../context/ErpContext';
 import { exportRowsToCSV, exportRowsToXLSX, exportTableToPDF } from '../../lib/exportUtils';
 import {
@@ -13,38 +13,42 @@ import {
 type ReportId =
   | 'daily_sales'
   | 'monthly_sales'
-  | 'shop_sales'
   | 'product_sales'
-  | 'warehouse_stock'
+  | 'shop_sales'
+  | 'current_stock'
   | 'stock_movement'
+  | 'warehouse_stock'
   | 'direct_delivery'
   | 'purchase_report'
-  | 'shop_outstanding'
+  | 'customer_outstanding'
   | 'supplier_outstanding'
   | 'payment_collection'
   | 'gross_profit'
-  | 'damaged_stock'
   | 'returns_report'
-  | 'user_activity'
-  | 'location_analytics';
+  | 'damaged_stock'
+  | 'employee_activity'
+  | 'area_sales'
+  | 'monthly_business_summary';
 
 const REPORT_LIST: Array<{ id: ReportId; label: string; requiresProfit?: boolean }> = [
   { id: 'daily_sales', label: '1. Daily Sales Report' },
   { id: 'monthly_sales', label: '2. Monthly Sales Report' },
-  { id: 'shop_sales', label: '3. Shop-wise Sales Report' },
-  { id: 'product_sales', label: '4. Product-wise Sales Report' },
-  { id: 'warehouse_stock', label: '5. Warehouse Stock Report' },
+  { id: 'product_sales', label: '3. Product-wise Sales Report' },
+  { id: 'shop_sales', label: '4. Shop-wise Sales Report' },
+  { id: 'current_stock', label: '5. Current Stock Report' },
   { id: 'stock_movement', label: '6. Stock Movement Report' },
-  { id: 'direct_delivery', label: '7. Direct Delivery Report' },
-  { id: 'purchase_report', label: '8. Purchase Report' },
-  { id: 'shop_outstanding', label: '9. Shop Outstanding Report' },
-  { id: 'supplier_outstanding', label: '10. Supplier Outstanding Report' },
-  { id: 'payment_collection', label: '11. Payment Collection Report' },
-  { id: 'gross_profit', label: '12. Gross Profit Report', requiresProfit: true },
-  { id: 'damaged_stock', label: '13. Damaged Stock Report' },
+  { id: 'warehouse_stock', label: '7. Warehouse Stock Report' },
+  { id: 'direct_delivery', label: '8. Direct Delivery Report' },
+  { id: 'purchase_report', label: '9. Purchase Report' },
+  { id: 'customer_outstanding', label: '10. Customer Outstanding Report' },
+  { id: 'supplier_outstanding', label: '11. Supplier Outstanding Report' },
+  { id: 'payment_collection', label: '12. Payment Collection Report' },
+  { id: 'gross_profit', label: '13. Gross Profit Report', requiresProfit: true },
   { id: 'returns_report', label: '14. Returns Report' },
-  { id: 'user_activity', label: '15. User Activity Report' },
-  { id: 'location_analytics', label: '16. Paschim Medinipur Area Report' },
+  { id: 'damaged_stock', label: '15. Damaged Stock Report' },
+  { id: 'employee_activity', label: '16. Employee Activity Report' },
+  { id: 'area_sales', label: '17. Area-wise Sales Report (Paschim Medinipur)' },
+  { id: 'monthly_business_summary', label: '18. Monthly Business Summary', requiresProfit: true },
 ];
 
 export const ReportsView: React.FC = () => {
@@ -56,6 +60,8 @@ export const ReportsView: React.FC = () => {
     purchases,
     sales,
     saleItems,
+    invoices,
+    invoiceItems,
     stockMovements,
     payments,
     returns,
@@ -71,7 +77,7 @@ export const ReportsView: React.FC = () => {
   const [productFilter, setProductFilter] = useState('all');
   const [blockFilter, setBlockFilter] = useState('all');
   const [userFilter, setUserFilter] = useState('all');
-  const [groupByLoc, setGroupByLoc] = useState<'district' | 'blockArea' | 'villageTown' | 'route'>(
+  const [groupByLoc, setGroupByLoc] = useState<'blockArea' | 'town' | 'villageTown' | 'district' | 'route'>(
     'blockArea'
   );
 
@@ -84,6 +90,7 @@ export const ReportsView: React.FC = () => {
     () => Array.from(new Set(shops.map((s) => s.blockArea).filter(Boolean))).sort(),
     [shops]
   );
+
   const staffNames = useMemo(
     () => Array.from(new Set(auditLogs.map((a) => a.userName).filter(Boolean))).sort(),
     [auditLogs]
@@ -95,6 +102,8 @@ export const ReportsView: React.FC = () => {
     rows: Array<Array<string | number>>;
   }>(() => {
     const shopById = new Map(shops.map((s) => [s.id, s]));
+
+    // Combined sales + confirmed Bill Book invoices filtered by date/shop/area/user
     const filteredSales = sales.filter((s) => {
       if (s.deliveryStatus === 'reversed') return false;
       if (!isDateInRange(s.saleDate, dateFrom, dateTo)) return false;
@@ -104,6 +113,30 @@ export const ReportsView: React.FC = () => {
       if (userFilter !== 'all' && s.createdByName !== userFilter) return false;
       return true;
     });
+
+    const filteredBills =
+      supplierFilter !== 'all'
+        ? []
+        : invoices.filter((inv) => {
+            if (inv.status !== 'confirmed') return false;
+            if (!isDateInRange(inv.invoiceDate, dateFrom, dateTo)) return false;
+            if (shopFilter !== 'all' && inv.shopId !== shopFilter) return false;
+            if (blockFilter !== 'all' && inv.shopBlock !== blockFilter) return false;
+            if (userFilter !== 'all' && inv.createdByName !== userFilter) return false;
+            return true;
+          });
+
+    // Bill book items profit helper
+    const billMetricsByInv = new Map<string, { cost: number; profit: number }>();
+    const billIdSet = new Set(filteredBills.map((b) => b.id));
+    for (const ii of invoiceItems) {
+      if (!billIdSet.has(ii.invoiceId)) continue;
+      const cur = billMetricsByInv.get(ii.invoiceId) || { cost: 0, profit: 0 };
+      const lineCost = ii.qty * ii.unitCost;
+      cur.cost += lineCost;
+      cur.profit += ii.amount - lineCost;
+      billMetricsByInv.set(ii.invoiceId, cur);
+    }
 
     switch (reportId) {
       case 'daily_sales': {
@@ -117,7 +150,24 @@ export const ReportsView: React.FC = () => {
           c.profit += s.grossProfit;
           map.set(s.saleDate, c);
         }
-        const headers = ['Date', 'Invoices', 'Net Sales (₹)', 'Collected (₹)', 'Due (₹)', ...(caps.canViewProfitMetrics ? ['Gross Profit (₹)'] : [])];
+        for (const inv of filteredBills) {
+          const c = map.get(inv.invoiceDate) || { count: 0, net: 0, paid: 0, due: 0, profit: 0 };
+          const bm = billMetricsByInv.get(inv.id);
+          c.count += 1;
+          c.net += inv.netTotal;
+          c.paid += inv.paymentReceived;
+          c.due += inv.remainingDue;
+          c.profit += bm ? bm.profit : 0;
+          map.set(inv.invoiceDate, c);
+        }
+        const headers = [
+          'Date',
+          'Invoices / Bills',
+          'Net Sales (₹)',
+          'Collected (₹)',
+          'Due (₹)',
+          ...(caps.canViewProfitMetrics ? ['Gross Profit (₹)'] : []),
+        ];
         const rows = Array.from(map.entries())
           .sort((a, b) => b[0].localeCompare(a[0]))
           .map(([dt, v]) => [
@@ -128,7 +178,7 @@ export const ReportsView: React.FC = () => {
             v.due.toFixed(2),
             ...(caps.canViewProfitMetrics ? [v.profit.toFixed(2)] : []),
           ]);
-        return { title: 'Daily Sales Report', headers, rows };
+        return { title: 'Daily Sales Report (Dispatches + Bill Book)', headers, rows };
       }
 
       case 'monthly_sales': {
@@ -142,7 +192,23 @@ export const ReportsView: React.FC = () => {
           c.profit += s.grossProfit;
           map.set(mo, c);
         }
-        const headers = ['Month', 'Invoices', 'Net Sales (₹)', 'Collected (₹)', ...(caps.canViewProfitMetrics ? ['Gross Profit (₹)'] : [])];
+        for (const inv of filteredBills) {
+          const mo = inv.invoiceDate.slice(0, 7);
+          const bm = billMetricsByInv.get(inv.id);
+          const c = map.get(mo) || { count: 0, net: 0, paid: 0, profit: 0 };
+          c.count += 1;
+          c.net += inv.netTotal;
+          c.paid += inv.paymentReceived;
+          c.profit += bm ? bm.profit : 0;
+          map.set(mo, c);
+        }
+        const headers = [
+          'Month',
+          'Invoices / Bills',
+          'Net Sales (₹)',
+          'Collected (₹)',
+          ...(caps.canViewProfitMetrics ? ['Gross Profit (₹)'] : []),
+        ];
         const rows = Array.from(map.entries())
           .sort((a, b) => b[0].localeCompare(a[0]))
           .map(([mo, v]) => [
@@ -153,30 +219,6 @@ export const ReportsView: React.FC = () => {
             ...(caps.canViewProfitMetrics ? [v.profit.toFixed(2)] : []),
           ]);
         return { title: 'Monthly Sales Report', headers, rows };
-      }
-
-      case 'shop_sales': {
-        const map = new Map<string, { name: string; area: string; count: number; net: number; due: number }>();
-        for (const s of filteredSales) {
-          const c = map.get(s.shopId) || {
-            name: s.shopName,
-            area: s.shopBlock || '-',
-            count: 0,
-            net: 0,
-            due: 0,
-          };
-          c.count += 1;
-          c.net += s.netTotal;
-          c.due += s.remainingDue;
-          map.set(s.shopId, c);
-        }
-        return {
-          title: 'Shop-wise Sales Report',
-          headers: ['Shop Name', 'Block / Area', 'Invoices', 'Total Sales (₹)', 'Invoice Due (₹)'],
-          rows: Array.from(map.values())
-            .sort((a, b) => b.net - a.net)
-            .map((v) => [v.name, v.area, v.count, v.net.toFixed(2), v.due.toFixed(2)]),
-        };
       }
 
       case 'product_sales': {
@@ -197,9 +239,30 @@ export const ReportsView: React.FC = () => {
           c.profit += it.lineProfit;
           map.set(it.productId, c);
         }
+        for (const ii of invoiceItems) {
+          if (!billIdSet.has(ii.invoiceId)) continue;
+          if (productFilter !== 'all' && ii.productId !== productFilter) continue;
+          const c = map.get(ii.productId) || {
+            name: ii.productName,
+            sku: ii.sku,
+            qty: 0,
+            rev: 0,
+            profit: 0,
+          };
+          c.qty += ii.qty;
+          c.rev += ii.amount;
+          c.profit += ii.amount - ii.qty * ii.unitCost;
+          map.set(ii.productId, c);
+        }
         return {
           title: 'Product-wise Sales Report',
-          headers: ['Product', 'SKU', 'Qty Sold', 'Sales Revenue (₹)', ...(caps.canViewProfitMetrics ? ['Profit (₹)'] : [])],
+          headers: [
+            'Product',
+            'SKU',
+            'Qty Sold',
+            'Sales Revenue (₹)',
+            ...(caps.canViewProfitMetrics ? ['Profit (₹)'] : []),
+          ],
           rows: Array.from(map.values())
             .sort((a, b) => b.rev - a.rev)
             .map((v) => [
@@ -212,19 +275,70 @@ export const ReportsView: React.FC = () => {
         };
       }
 
-      case 'warehouse_stock': {
-        const list = products.filter((p) => productFilter === 'all' || p.id === productFilter);
+      case 'shop_sales': {
+        const map = new Map<string, { name: string; area: string; count: number; net: number; due: number }>();
+        for (const s of filteredSales) {
+          const c = map.get(s.shopId) || {
+            name: s.shopName,
+            area: s.shopBlock || '-',
+            count: 0,
+            net: 0,
+            due: 0,
+          };
+          c.count += 1;
+          c.net += s.netTotal;
+          c.due += s.remainingDue;
+          map.set(s.shopId, c);
+        }
+        for (const inv of filteredBills) {
+          const c = map.get(inv.shopId) || {
+            name: inv.shopName,
+            area: inv.shopBlock || '-',
+            count: 0,
+            net: 0,
+            due: 0,
+          };
+          c.count += 1;
+          c.net += inv.netTotal;
+          c.due += inv.remainingDue;
+          map.set(inv.shopId, c);
+        }
         return {
-          title: 'Warehouse Stock Report',
-          headers: ['Product', 'SKU', 'Zone', 'Sellable Qty', 'Damaged Qty', 'Min Alert', ...(caps.canViewPurchasePrices ? ['Stock Value (₹)'] : [])],
+          title: 'Shop-wise Sales Report',
+          headers: ['Shop Name', 'Block / Area', 'Bills & Invoices', 'Total Sales (₹)', 'Bill Due (₹)'],
+          rows: Array.from(map.values())
+            .sort((a, b) => b.net - a.net)
+            .map((v) => [v.name, v.area, v.count, v.net.toFixed(2), v.due.toFixed(2)]),
+        };
+      }
+
+      case 'current_stock': {
+        const list = products
+          .filter((p) => productFilter === 'all' || p.id === productFilter)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        return {
+          title: 'Current Stock Report',
+          headers: [
+            'Product',
+            'SKU',
+            'Category',
+            'Available Qty',
+            'Min Alert',
+            'Wholesale Price (₹)',
+            'Status',
+          ],
           rows: list.map((p) => [
             p.name,
             p.sku,
-            p.warehouseZone || 'Main Rack A',
+            p.category,
             `${p.availableQty} ${p.unit}`,
-            p.damagedQty,
             p.minStockAlert,
-            ...(caps.canViewPurchasePrices ? [(p.availableQty * p.purchasePrice).toFixed(2)] : []),
+            p.sellingPrice.toFixed(2),
+            p.availableQty <= 0
+              ? 'OUT OF STOCK'
+              : p.availableQty <= p.minStockAlert
+              ? 'LOW STOCK'
+              : 'HEALTHY',
           ]),
         };
       }
@@ -251,11 +365,43 @@ export const ReportsView: React.FC = () => {
         };
       }
 
+      case 'warehouse_stock': {
+        const list = products.filter((p) => productFilter === 'all' || p.id === productFilter);
+        return {
+          title: 'Warehouse Stock Valuation Report',
+          headers: [
+            'Product',
+            'SKU',
+            'Zone',
+            'Sellable Qty',
+            'Damaged Qty',
+            'Min Alert',
+            ...(caps.canViewPurchasePrices ? ['Stock Value (₹)'] : []),
+          ],
+          rows: list.map((p) => [
+            p.name,
+            p.sku,
+            p.warehouseZone || 'Main Rack A',
+            `${p.availableQty} ${p.unit}`,
+            p.damagedQty,
+            p.minStockAlert,
+            ...(caps.canViewPurchasePrices ? [(p.availableQty * p.purchasePrice).toFixed(2)] : []),
+          ]),
+        };
+      }
+
       case 'direct_delivery': {
         const list = filteredSales.filter((s) => s.deliveryMethod === 'direct_supplier_dispatch');
         return {
           title: 'Direct Supplier Delivery Report',
-          headers: ['Date', 'Invoice', 'Supplier', 'Shop', 'Sale Total (₹)', ...(caps.canViewProfitMetrics ? ['Cost (₹)', 'Gross Profit (₹)'] : [])],
+          headers: [
+            'Date',
+            'Invoice',
+            'Supplier',
+            'Shop',
+            'Sale Total (₹)',
+            ...(caps.canViewProfitMetrics ? ['Cost (₹)', 'Gross Profit (₹)'] : []),
+          ],
           rows: list.map((s) => [
             formatDateDDMMYYYY(s.saleDate),
             s.invoiceNumber,
@@ -290,7 +436,7 @@ export const ReportsView: React.FC = () => {
         };
       }
 
-      case 'shop_outstanding': {
+      case 'customer_outstanding': {
         const list = shops
           .filter(
             (s) =>
@@ -299,8 +445,15 @@ export const ReportsView: React.FC = () => {
           )
           .sort((a, b) => b.currentOutstanding - a.currentOutstanding);
         return {
-          title: 'Shop Outstanding Report',
-          headers: ['Shop Name', 'Village / Block', 'Mobile', 'Credit Limit (₹)', 'Outstanding (₹)', 'Last Delivery'],
+          title: 'Customer Outstanding Report',
+          headers: [
+            'Shop Name',
+            'Village / Block',
+            'Mobile',
+            'Credit Limit (₹)',
+            'Outstanding (₹)',
+            'Last Delivery',
+          ],
           rows: list.map((s) => [
             s.shopName,
             `${s.villageTown}, ${s.blockArea}`,
@@ -318,7 +471,13 @@ export const ReportsView: React.FC = () => {
           .sort((a, b) => b.outstandingPayable - a.outstandingPayable);
         return {
           title: 'Supplier Outstanding Report',
-          headers: ['Supplier', 'Phone', 'Total Purchases (₹)', 'Payments Made (₹)', 'Outstanding Payable (₹)'],
+          headers: [
+            'Supplier',
+            'Phone',
+            'Total Purchases (₹)',
+            'Payments Made (₹)',
+            'Outstanding Payable (₹)',
+          ],
           rows: list.map((s) => [
             s.name,
             s.phone,
@@ -354,34 +513,33 @@ export const ReportsView: React.FC = () => {
       }
 
       case 'gross_profit': {
-        return {
-          title: 'Gross Profit Report',
-          headers: ['Date', 'Invoice', 'Shop', 'Method', 'Net Sales (₹)', 'COGS (₹)', 'Gross Profit (₹)'],
-          rows: filteredSales.map((s) => [
+        const rows: Array<Array<string | number>> = [
+          ...filteredSales.map((s) => [
             formatDateDDMMYYYY(s.saleDate),
             s.invoiceNumber,
             s.shopName,
-            s.deliveryMethod === 'warehouse_dispatch' ? 'Warehouse' : 'Direct',
+            s.deliveryMethod === 'warehouse_dispatch' ? 'Warehouse Dispatch' : 'Direct Delivery',
             s.netTotal.toFixed(2),
             s.totalCost.toFixed(2),
             s.grossProfit.toFixed(2),
           ]),
-        };
-      }
-
-      case 'damaged_stock': {
-        const list = products.filter((p) => p.damagedQty > 0);
+          ...filteredBills.map((inv) => {
+            const bm = billMetricsByInv.get(inv.id) || { cost: 0, profit: inv.netTotal };
+            return [
+              formatDateDDMMYYYY(inv.invoiceDate),
+              inv.invoiceNumber,
+              inv.shopName,
+              'Bill Book',
+              inv.netTotal.toFixed(2),
+              bm.cost.toFixed(2),
+              bm.profit.toFixed(2),
+            ];
+          }),
+        ];
         return {
-          title: 'Damaged Stock Report',
-          headers: ['Product', 'SKU', 'Damaged Qty', 'Sellable Qty', 'Zone', ...(caps.canViewPurchasePrices ? ['Est. Damage Loss (₹)'] : [])],
-          rows: list.map((p) => [
-            p.name,
-            p.sku,
-            `${p.damagedQty} ${p.unit}`,
-            p.availableQty,
-            p.warehouseZone || '-',
-            ...(caps.canViewPurchasePrices ? [(p.damagedQty * p.purchasePrice).toFixed(2)] : []),
-          ]),
+          title: 'Gross Profit Report (Sales + Bill Book)',
+          headers: ['Date', 'Invoice / Bill', 'Shop', 'Channel', 'Net Sales (₹)', 'COGS (₹)', 'Gross Profit (₹)'],
+          rows,
         };
       }
 
@@ -407,13 +565,36 @@ export const ReportsView: React.FC = () => {
         };
       }
 
-      case 'user_activity': {
+      case 'damaged_stock': {
+        const list = products.filter((p) => p.damagedQty > 0);
+        return {
+          title: 'Damaged Stock Report',
+          headers: [
+            'Product',
+            'SKU',
+            'Damaged Qty',
+            'Sellable Qty',
+            'Zone',
+            ...(caps.canViewPurchasePrices ? ['Est. Damage Loss (₹)'] : []),
+          ],
+          rows: list.map((p) => [
+            p.name,
+            p.sku,
+            `${p.damagedQty} ${p.unit}`,
+            p.availableQty,
+            p.warehouseZone || '-',
+            ...(caps.canViewPurchasePrices ? [(p.damagedQty * p.purchasePrice).toFixed(2)] : []),
+          ]),
+        };
+      }
+
+      case 'employee_activity': {
         const list = auditLogs
           .filter((a) => userFilter === 'all' || a.userName === userFilter)
           .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         return {
-          title: 'User Activity & Audit Report',
-          headers: ['Timestamp (IST)', 'User', 'Role', 'Module', 'Action', 'Details'],
+          title: 'Employee Activity & Audit Report',
+          headers: ['Timestamp (IST)', 'Employee', 'Role', 'Module', 'Action', 'Details'],
           rows: list.map((a) => [
             formatTimestampIST(a.createdAt),
             a.userName,
@@ -425,29 +606,53 @@ export const ReportsView: React.FC = () => {
         };
       }
 
-      case 'location_analytics': {
+      case 'area_sales': {
         const map = new Map<
           string,
-          { shopsCount: number; deliveries: number; sales: number; outstanding: number }
+          { shopsCount: number; deliveries: number; sales: number; collected: number; outstanding: number }
         >();
+        const getKey = (sh?: (typeof shops)[number], fallback?: string) => {
+          if (!sh) return fallback || 'Unspecified';
+          if (groupByLoc === 'town') return (sh.town || sh.villageTown || 'Unspecified').trim();
+          return (sh[groupByLoc] || fallback || 'Unspecified').trim();
+        };
+
         for (const sh of shops) {
-          const key = (sh[groupByLoc] || 'Unspecified').trim();
-          const c = map.get(key) || { shopsCount: 0, deliveries: 0, sales: 0, outstanding: 0 };
+          const key = getKey(sh);
+          const c = map.get(key) || { shopsCount: 0, deliveries: 0, sales: 0, collected: 0, outstanding: 0 };
           c.shopsCount += 1;
           c.outstanding += sh.currentOutstanding;
           map.set(key, c);
         }
         for (const s of filteredSales) {
           const sh = shopById.get(s.shopId);
-          const key = (sh?.[groupByLoc] || s.shopBlock || 'Unspecified').trim();
-          const c = map.get(key) || { shopsCount: 0, deliveries: 0, sales: 0, outstanding: 0 };
+          const key = getKey(sh, s.shopBlock);
+          const c = map.get(key) || { shopsCount: 0, deliveries: 0, sales: 0, collected: 0, outstanding: 0 };
           c.deliveries += 1;
           c.sales += s.netTotal;
+          c.collected += s.paymentReceived;
           map.set(key, c);
         }
+        for (const inv of filteredBills) {
+          const sh = shopById.get(inv.shopId);
+          const key = getKey(sh, inv.shopBlock);
+          const c = map.get(key) || { shopsCount: 0, deliveries: 0, sales: 0, collected: 0, outstanding: 0 };
+          c.deliveries += 1;
+          c.sales += inv.netTotal;
+          c.collected += inv.paymentReceived;
+          map.set(key, c);
+        }
+
         return {
-          title: `Location-Based Report (Grouped by ${groupByLoc})`,
-          headers: ['Area / Route', 'Active Shops', 'Deliveries (Period)', 'Sales (₹)', 'Current Outstanding (₹)'],
+          title: `Area-wise Sales Analytics (Grouped by ${groupByLoc})`,
+          headers: [
+            'Paschim Medinipur Area / Route',
+            'Registered Shops',
+            'Bills & Deliveries',
+            'Sales Volume (₹)',
+            'Collected (₹)',
+            'Current Due (₹)',
+          ],
           rows: Array.from(map.entries())
             .sort((a, b) => b[1].sales - a[1].sales)
             .map(([k, v]) => [
@@ -455,7 +660,77 @@ export const ReportsView: React.FC = () => {
               v.shopsCount,
               v.deliveries,
               v.sales.toFixed(2),
+              v.collected.toFixed(2),
               v.outstanding.toFixed(2),
+            ]),
+        };
+      }
+
+      case 'monthly_business_summary': {
+        const map = new Map<
+          string,
+          { sales: number; purchases: number; collected: number; paidSup: number; profit: number; returns: number }
+        >();
+        const ensureMo = (mo: string) => {
+          const cur = map.get(mo) || {
+            sales: 0,
+            purchases: 0,
+            collected: 0,
+            paidSup: 0,
+            profit: 0,
+            returns: 0,
+          };
+          map.set(mo, cur);
+          return cur;
+        };
+
+        for (const s of filteredSales) {
+          const c = ensureMo(s.saleDate.slice(0, 7));
+          c.sales += s.netTotal;
+          c.profit += s.grossProfit;
+        }
+        for (const inv of filteredBills) {
+          const c = ensureMo(inv.invoiceDate.slice(0, 7));
+          const bm = billMetricsByInv.get(inv.id);
+          c.sales += inv.netTotal;
+          c.profit += bm ? bm.profit : 0;
+        }
+        for (const p of purchases) {
+          if (p.status === 'reversed' || !isDateInRange(p.purchaseDate, dateFrom, dateTo)) continue;
+          ensureMo(p.purchaseDate.slice(0, 7)).purchases += p.totalCost;
+        }
+        for (const pay of payments) {
+          if (pay.status !== 'active' || !isDateInRange(pay.paymentDate, dateFrom, dateTo)) continue;
+          const c = ensureMo(pay.paymentDate.slice(0, 7));
+          if (pay.partyType === 'shop') c.collected += pay.amount;
+          else c.paidSup += pay.amount;
+        }
+        for (const ret of returns) {
+          if (ret.status !== 'completed' || !isDateInRange(ret.returnDate, dateFrom, dateTo)) continue;
+          ensureMo(ret.returnDate.slice(0, 7)).returns += ret.totalValue;
+        }
+
+        return {
+          title: 'Monthly Business Summary Report',
+          headers: [
+            'Month',
+            'Total Sales (₹)',
+            'Purchases (₹)',
+            'Collected (₹)',
+            'Supplier Paid (₹)',
+            'Returns (₹)',
+            'Est. Gross Profit (₹)',
+          ],
+          rows: Array.from(map.entries())
+            .sort((a, b) => b[0].localeCompare(a[0]))
+            .map(([mo, v]) => [
+              mo,
+              v.sales.toFixed(2),
+              v.purchases.toFixed(2),
+              v.collected.toFixed(2),
+              v.paidSup.toFixed(2),
+              v.returns.toFixed(2),
+              v.profit.toFixed(2),
             ]),
         };
       }
@@ -477,11 +752,19 @@ export const ReportsView: React.FC = () => {
     purchases,
     sales,
     saleItems,
+    invoices,
+    invoiceItems,
     stockMovements,
     payments,
     returns,
     auditLogs,
   ]);
+
+  // Quick Paschim Medinipur area breakdown summary for Area-wise report
+  const topAreaCards = useMemo(() => {
+    if (reportId !== 'area_sales') return [];
+    return reportData.rows.slice(0, 4);
+  }, [reportId, reportData.rows]);
 
   return (
     <div className="space-y-4">
@@ -491,7 +774,7 @@ export const ReportsView: React.FC = () => {
           <select
             value={reportId}
             onChange={(e) => setReportId(e.target.value as ReportId)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900"
+            className="rounded-lg border border-pink-200 bg-pink-50/40 px-3 py-1.5 text-xs font-semibold text-slate-900 focus:border-pink-600 focus:outline-none"
           >
             {visibleReports.map((r) => (
               <option key={r.id} value={r.id}>
@@ -528,7 +811,7 @@ export const ReportsView: React.FC = () => {
                 settings
               )
             }
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-pink-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-pink-700"
           >
             <Download className="h-3.5 w-3.5" />
             <span>PDF</span>
@@ -538,7 +821,7 @@ export const ReportsView: React.FC = () => {
             onClick={() =>
               exportRowsToXLSX(`${reportId}.xlsx`, reportId, reportData.headers, reportData.rows)
             }
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
           >
             <Download className="h-3.5 w-3.5" />
             <span>XLSX</span>
@@ -546,7 +829,7 @@ export const ReportsView: React.FC = () => {
           <button
             type="button"
             onClick={() => exportRowsToCSV(`${reportId}.csv`, reportData.headers, reportData.rows)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
           >
             <Download className="h-3.5 w-3.5" />
             <span>CSV</span>
@@ -625,28 +908,54 @@ export const ReportsView: React.FC = () => {
           ))}
         </select>
 
-        {reportId === 'location_analytics' && (
+        {reportId === 'area_sales' && (
           <select
             value={groupByLoc}
             onChange={(e) => setGroupByLoc(e.target.value as typeof groupByLoc)}
-            className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 font-medium text-blue-700"
+            className="rounded-lg border border-pink-200 bg-pink-50 px-2.5 py-1.5 font-medium text-pink-700"
           >
             <option value="blockArea">Group by Block / Area</option>
-            <option value="villageTown">Group by Village / Town</option>
+            <option value="town">Group by Town / Hub</option>
+            <option value="villageTown">Group by Village / Market</option>
             <option value="district">Group by District</option>
             <option value="route">Group by Delivery Route</option>
           </select>
         )}
       </div>
 
+      {/* Area Analytics Top Highlight Strip */}
+      {topAreaCards.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {topAreaCards.map((row) => (
+            <div key={String(row[0])} className="rounded-xl border border-pink-100 bg-white p-4">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-pink-700">
+                <MapPin className="h-3.5 w-3.5" />
+                <span className="truncate">{String(row[0])}</span>
+              </div>
+              <div className="mt-1.5 font-mono text-lg font-bold text-slate-900 tabular-nums">
+                {formatINR(Number(row[3]))}
+              </div>
+              <div className="mt-0.5 text-[11px] text-slate-500">
+                {row[1]} shops · {row[2]} orders · Due {formatINR(Number(row[5]))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Report Output Table */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <h3 className="text-sm font-semibold text-slate-900">{reportData.title}</h3>
-          <p className="text-[11px] text-slate-500">
-            {reportData.rows.length} rows · {formatDateDDMMYYYY(dateFrom)} to{' '}
-            {formatDateDDMMYYYY(dateTo)}
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">{reportData.title}</h3>
+            <p className="text-[11px] text-slate-500">
+              {reportData.rows.length} rows · {formatDateDDMMYYYY(dateFrom)} to{' '}
+              {formatDateDDMMYYYY(dateTo)}
+            </p>
+          </div>
+          <span className="text-[11px] font-semibold text-pink-700">
+            Pramanik Digital Point Analytics
+          </span>
         </div>
         <table className="w-full text-left text-xs">
           <thead className="border-b border-slate-200 bg-slate-50 text-slate-500">

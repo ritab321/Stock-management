@@ -69,7 +69,7 @@ export function formatTimestampIST(ts?: { toDate?: () => Date } | null): string 
   return `${datePart} ${timePart}`;
 }
 
-export type DatePreset = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'custom';
+export type DatePreset = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'this_year' | 'custom';
 
 export function getDateRangeForPreset(
   preset: DatePreset,
@@ -92,6 +92,9 @@ export function getDateRangeForPreset(
   if (preset === 'this_month') {
     return { from: `${today.slice(0, 7)}-01`, to: today };
   }
+  if (preset === 'this_year') {
+    return { from: `${today.slice(0, 4)}-01-01`, to: today };
+  }
   return {
     from: customFrom || `${today.slice(0, 7)}-01`,
     to: customTo || today,
@@ -102,6 +105,67 @@ export function isDateInRange(dateStr: string | undefined, from: string, to: str
   if (!dateStr) return false;
   const d = dateStr.slice(0, 10);
   return d >= from && d <= to;
+}
+
+const ONES = [
+  '',
+  'One',
+  'Two',
+  'Three',
+  'Four',
+  'Five',
+  'Six',
+  'Seven',
+  'Eight',
+  'Nine',
+  'Ten',
+  'Eleven',
+  'Twelve',
+  'Thirteen',
+  'Fourteen',
+  'Fifteen',
+  'Sixteen',
+  'Seventeen',
+  'Eighteen',
+  'Nineteen',
+];
+const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+function twoDigitsToWords(n: number): string {
+  if (n === 0) return '';
+  if (n < 20) return ONES[n];
+  const t = Math.floor(n / 10);
+  const o = n % 10;
+  return o > 0 ? `${TENS[t]} ${ONES[o]}` : TENS[t];
+}
+
+function intToIndianWords(num: number): string {
+  if (num === 0) return 'Zero';
+  const parts: string[] = [];
+  const crore = Math.floor(num / 10000000);
+  const lakh = Math.floor((num % 10000000) / 100000);
+  const thousand = Math.floor((num % 100000) / 1000);
+  const hundred = Math.floor((num % 1000) / 100);
+  const rem = num % 100;
+
+  if (crore > 0) parts.push(`${intToIndianWords(crore)} Crore`);
+  if (lakh > 0) parts.push(`${twoDigitsToWords(lakh)} Lakh`);
+  if (thousand > 0) parts.push(`${twoDigitsToWords(thousand)} Thousand`);
+  if (hundred > 0) parts.push(`${ONES[hundred]} Hundred`);
+  if (rem > 0) parts.push(twoDigitsToWords(rem));
+
+  return parts.join(' ').trim();
+}
+
+export function numberToIndianWords(amount: number): string {
+  const safe = Math.max(0, Number.isFinite(amount) ? amount : 0);
+  const rupees = Math.floor(safe);
+  const paise = Math.round((safe - rupees) * 100);
+  const rupeeWords = `Rupees ${intToIndianWords(rupees)}`;
+  if (paise > 0) {
+    return `${rupeeWords} and ${twoDigitsToWords(paise)} Paise Only`;
+  }
+  return `${rupeeWords} Only`;
 }
 
 export function makeSafeId(prefix: string): string {

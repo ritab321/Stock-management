@@ -83,8 +83,8 @@ export const UsersView: React.FC = () => {
           <button
             type="button"
             onClick={() => setTab('users')}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-              tab === 'users' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'
+            className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium ${
+              tab === 'users' ? 'bg-white text-[#172554] shadow-xs' : 'text-slate-600'
             }`}
           >
             Users & Role Permissions
@@ -92,8 +92,8 @@ export const UsersView: React.FC = () => {
           <button
             type="button"
             onClick={() => setTab('audit')}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-              tab === 'audit' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'
+            className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium ${
+              tab === 'audit' ? 'bg-white text-[#172554] shadow-xs' : 'text-slate-600'
             }`}
           >
             Activity & Audit Log ({auditLogs.length})
@@ -106,7 +106,7 @@ export const UsersView: React.FC = () => {
             setErr(null);
             setInviteOpen(true);
           }}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#172554] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-950"
         >
           <Plus className="h-3.5 w-3.5" />
           <span>Invite Staff User</span>
@@ -118,7 +118,7 @@ export const UsersView: React.FC = () => {
           {/* Active Registered Users */}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 text-xs font-semibold text-slate-900">
-              <UserCheck className="h-4 w-4 text-blue-600" />
+              <UserCheck className="h-4 w-4 text-[#172554]" />
               <span>Active & Registered User Accounts ({users.length})</span>
             </div>
             <table className="w-full text-left text-xs">
@@ -139,7 +139,7 @@ export const UsersView: React.FC = () => {
                       <div className="font-mono text-[11px] text-slate-500">{u.email}</div>
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-600">{u.phone || '-'}</td>
-                    <td className="px-4 py-3 font-medium text-blue-700">
+                    <td className="px-4 py-3 font-medium text-[#172554]">
                       {ROLE_CAPABILITIES[u.role]?.label || u.role}
                     </td>
                     <td className="px-4 py-3">
@@ -159,7 +159,7 @@ export const UsersView: React.FC = () => {
                             active: u.active,
                           });
                         }}
-                        className="rounded border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-50"
+                        className="whitespace-nowrap rounded border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-[#172554] hover:bg-slate-100"
                       >
                         Edit / Manage
                       </button>
@@ -189,7 +189,8 @@ export const UsersView: React.FC = () => {
                 {staffInvites.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
-                      No staff invitations created yet. Click &ldquo;Invite Staff User&rdquo; to authorize a Manager, Sales Staff, Accounts Staff, or Stock Manager.
+                      No staff invitations created yet. Click &ldquo;Invite Staff User&rdquo; to
+                      authorize a Manager, Sales Staff, Accounts Staff, or Stock Manager.
                     </td>
                   </tr>
                 ) : (
@@ -197,7 +198,7 @@ export const UsersView: React.FC = () => {
                     <tr key={inv.id}>
                       <td className="px-4 py-2.5 font-medium text-slate-900">{inv.displayName}</td>
                       <td className="px-4 py-2.5 font-mono text-slate-600">{inv.email}</td>
-                      <td className="px-4 py-2.5 text-blue-700">
+                      <td className="px-4 py-2.5 text-[#172554]">
                         {ROLE_CAPABILITIES[inv.role]?.label || inv.role}
                       </td>
                       <td className="px-4 py-2.5">
@@ -221,12 +222,15 @@ export const UsersView: React.FC = () => {
                 <th className="px-4 py-3 font-medium">User & Role</th>
                 <th className="px-4 py-3 font-medium">Module / Action</th>
                 <th className="px-4 py-3 font-medium">Details</th>
+                <th className="px-4 py-3 font-medium">Old Value</th>
+                <th className="px-4 py-3 font-medium">New Value</th>
+                <th className="px-4 py-3 font-medium">Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {sortedAudit.map((a) => (
                 <tr key={a.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2.5 font-mono text-[11px] text-slate-500 tabular-nums">
+                  <td className="px-4 py-2.5 font-mono text-[11px] text-slate-500 tabular-nums whitespace-nowrap">
                     {formatTimestampIST(a.createdAt)}
                   </td>
                   <td className="px-4 py-2.5">
@@ -234,12 +238,19 @@ export const UsersView: React.FC = () => {
                     <div className="text-[11px] text-slate-400">{a.userRole}</div>
                   </td>
                   <td className="px-4 py-2.5">
-                    <div className="font-mono text-[11px] font-semibold text-blue-700">
+                    <div className="font-mono text-[11px] font-semibold text-[#172554]">
                       {a.action}
                     </div>
                     <div className="text-[11px] text-slate-400">{a.module}</div>
                   </td>
                   <td className="px-4 py-2.5 text-slate-700">{a.details}</td>
+                  <td className="px-4 py-2.5 font-mono text-[11px] text-slate-500">
+                    {a.oldValue || '-'}
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-[11px] text-emerald-700">
+                    {a.newValue || '-'}
+                  </td>
+                  <td className="px-4 py-2.5 text-[11px] text-slate-500">{a.notes || '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -316,7 +327,7 @@ export const UsersView: React.FC = () => {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white"
+              className="rounded-lg bg-[#172554] px-4 py-2 font-semibold text-white hover:bg-blue-950"
             >
               {saving ? 'Saving...' : 'Authorize Email'}
             </button>
@@ -384,7 +395,7 @@ export const UsersView: React.FC = () => {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white"
+              className="rounded-lg bg-[#172554] px-4 py-2 font-semibold text-white hover:bg-blue-950"
             >
               {saving ? 'Updating...' : 'Save Changes'}
             </button>
